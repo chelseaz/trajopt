@@ -299,6 +299,9 @@ PyGraphHandle DrawText(std::string text, float x, float y, float fontsize, py::o
     OpenRAVE::Vector color = OpenRAVE::Vector(py::extract<float>(pycolor[0]), py::extract<float>(pycolor[1]), py::extract<float>(pycolor[2]), py::extract<float>(pycolor[3]));
     return PyGraphHandle(m_viewer->drawtext(text, x, y, fontsize, color));
   }
+  void RemoveKinBody(py::object py_kb) {
+    m_viewer->RemoveKinBody(GetCppKinBody(py_kb, m_viewer->GetEnv()));
+  } 
   
 private:
   OSGViewerPtr m_viewer;
@@ -367,6 +370,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("SetAllTransparency", &PyOSGViewer::SetAllTransparency)
      .def("Idle", &PyOSGViewer::Idle)
      .def("DrawText", &PyOSGViewer::DrawText)
+     .def("RemoveKinBody", &PyOSGViewer::RemoveKinBody)
     ;
   py::def("GetViewer", &PyGetViewer, "Get OSG viewer for environment or create a new one");
 
