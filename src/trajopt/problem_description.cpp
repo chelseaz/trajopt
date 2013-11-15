@@ -120,6 +120,7 @@ TRAJOPT_API ProblemConstructionInfo* gPCI;
 void BasicInfo::fromJson(const Json::Value& v) {
   childFromJson(v, start_fixed, "start_fixed", true);
   childFromJson(v, n_steps, "n_steps");
+  childFromJson(v, n_ext, "n_ext", 0);
   childFromJson(v, manip, "manip");
   childFromJson(v, robot, "robot", string(""));
   childFromJson(v, dofs_fixed, "dofs_fixed", IntVec());
@@ -169,6 +170,7 @@ void InitInfo::fromJson(const Json::Value& v) {
   string type_str;
   childFromJson(v, type_str, "type");
   int n_steps = gPCI->basic_info.n_steps;
+  int n_ext = gPCI->basic_info.n_ext;
   int n_dof = gPCI->rad->GetDOF();
 
   if (type_str == "stationary") {
@@ -201,11 +203,18 @@ void InitInfo::fromJson(const Json::Value& v) {
     }
   }
 
+  data_ext.resize(n_ext, 1);
+  if (n_ext > 0) {
+	FAIL_IF_FALSE(v.isMember("data_ext"));
+	const Value& cdata = v["data_ext"];
+	DblVec col;
+	fromJsonArray(cdata, col, n_ext);
+	data_ext.col(0) = toVectorXd(col);
+  }
 }
 
 void ProblemConstructionInfo::fromJson(const Value& v) {
   childFromJson(v, basic_info, "basic_info");
-
   RobotBasePtr robot = (basic_info.robot=="") ? GetRobot(*env) : GetRobotByName(*env, basic_info.robot);
   if (!robot) {
     PRINT_AND_THROW("couldn't get robot");
@@ -251,7 +260,10 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   if (plot) {
     SetupPlotting(*prob, opt);
   }
-  opt.initialize(trajToDblVec(prob->GetInitTraj()));
+  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
+  DblVec init_ext = trajToDblVec(prob->GetInitExt());
+  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
+  opt.initialize(init_vars);
   opt.optimize();
   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
 }
@@ -260,8 +272,9 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
 
   const BasicInfo& bi = pci.basic_info;
   int n_steps = bi.n_steps;
+  int n_ext = bi.n_ext;
 
-  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad));
+  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, n_ext));
   int n_dof = prob->m_rad->GetDOF();
 
   DblVec cur_dofvals = prob->m_rad->GetDOFValues();
@@ -291,7 +304,7 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
   }
 
   prob->SetInitTraj(pci.init_info.data);
-
+  prob->SetInitExt(pci.init_info.data_ext);
   return prob;
 
 }
@@ -302,7 +315,7 @@ TrajOptProbPtr ConstructProblem(const Json::Value& root, OpenRAVE::EnvironmentBa
 }
 
 
-TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad) : m_rad(rad) {  
+TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int n_ext) : m_rad(rad) {
   DblVec lower, upper;
   m_rad->GetDOFLimits(lower, upper);
   int n_dof = m_rad->GetDOF();
@@ -324,6 +337,13 @@ TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad) : m_rad(rad) {
   }
   VarVector trajvarvec = createVariables(names, vlower, vupper);
   m_traj_vars = VarArray(n_steps, n_dof, trajvarvec.data());
+
+  vector<string> ext_names;
+  for (int i=0; i < n_ext; ++i) {
+	  ext_names.push_back( (boost::format("e_%i")%i).str() );
+  }
+  VarVector extvarvec = createVariables(ext_names);
+  m_ext_vars = VarArray(n_ext, 1, extvarvec.data());
 
   m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars));
 
