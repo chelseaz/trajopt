@@ -43,5 +43,23 @@ private:
   QuadExpr expr_;
 };
 
+class TRAJOPT_API TpsCost : public Cost {
+public:
+  TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lambda, double alpha, double beta, const MatrixXd& X_s_new, const MatrixXd& X_s, const MatrixXd& K, const MatrixXd& X_g);
+  virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
+  virtual double value(const vector<double>&);
+private:
+  VarArray traj_vars_;
+  VarArray tps_vars_;
+  double lambda_;
+  double alpha_;
+  double beta_;
+  MatrixXd X_s_new_;
+  MatrixXd X_s_;
+  MatrixXd K_;
+  MatrixXd X_g_;
+  QuadExpr expr_;
+};
+
 }
 
