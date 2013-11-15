@@ -45,7 +45,7 @@ enum TermType {
 class TRAJOPT_API TrajOptProb : public OptProb {
 public:
   TrajOptProb();
-  TrajOptProb(int n_steps, ConfigurationPtr rad);
+  TrajOptProb(int n_steps, ConfigurationPtr rad, int n_ext);
   ~TrajOptProb() {}
   VarVector GetVarRow(int i) {
     return m_traj_vars.row(i);
@@ -64,14 +64,19 @@ public:
   void SetInitTraj(const TrajArray& x) {m_init_traj = x;}
   TrajArray GetInitTraj() {return m_init_traj;}
 
+  void SetInitExt(const TrajArray& x) {m_init_ext = x;}
+  TrajArray GetInitExt() {return m_init_ext;}
+
   TrajPlotterPtr GetPlotter() {return m_trajplotter;}
 
   friend TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo&);
 
 private:
   VarArray m_traj_vars;
+  VarArray m_ext_vars;
   ConfigurationPtr m_rad;
   TrajArray m_init_traj;
+  TrajArray m_init_ext;
   TrajPlotterPtr m_trajplotter;
 };
 
@@ -87,6 +92,7 @@ struct TRAJOPT_API TrajOptResult {
 struct BasicInfo  {
   bool start_fixed;
   int n_steps;
+  int n_ext; // optional
   string manip;
   string robot; // optional
   IntVec dofs_fixed; // optional
@@ -103,6 +109,7 @@ struct InitInfo {
   };
   Type type;
   TrajArray data;
+  TrajArray data_ext;
   void fromJson(const Json::Value& v);
 };
 
