@@ -49,6 +49,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
+  TermInfo::RegisterMaker("tps_cost_cnt", &TpsCostConstraintInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
@@ -596,6 +597,83 @@ void JointConstraintInfo::hatch(TrajOptProb& prob) {
   }
 }
 
+void TpsCostConstraintInfo::fromJsonMatrix(MatrixXd& data, const Value& v) {
+  if (v.size() == 0) {
+    data.resize(0, 0);
+    return;
+  }
+  data.resize(v.size(), v[0].size());
+  for (int i=0; i < v.size(); ++i) {
+    DblVec row;
+    fromJsonArray(v[i], row, v[0].size());
+    data.row(i) = toVectorXd(row);
+  }
+}
 
+void TpsCostConstraintInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+
+  childFromJson(params, lambda, "lambda");
+  childFromJson(params, alpha, "alpha");
+  childFromJson(params, beta, "beta");
+
+  FAIL_IF_FALSE(v.isMember("X_s"));
+  const Value& dataX_s = v["X_s"];
+  fromJsonMatrix(X_s, dataX_s);
+
+  FAIL_IF_FALSE(v.isMember("X_s_new"));
+  const Value& dataX_s_new = v["X_s_new"];
+  fromJsonMatrix(X_s_new, dataX_s_new);
+
+  FAIL_IF_FALSE(v.isMember("K"));
+  const Value& dataK = v["K"];
+  fromJsonMatrix(K, dataK);
+
+  FAIL_IF_FALSE(v.isMember("X_g"));
+  const Value& dataX_g = v["X_g"];
+  fromJsonMatrix(X_g, dataX_g);
+
+  int d = X_s.rows();
+  int n = X_s.cols();
+
+  // TODO: Add check for X_g dimensions
+
+  if (X_s_new.rows() != d || X_s_new.cols() != n) {
+    PRINT_AND_THROW( boost::format("matrix X_s_new has wrong size. expected %ix%i got %ix%i")%d%n%X_s_new.rows()%X_s_new.cols());
+  }
+
+  if (K.rows() != n || K.cols() != n) {
+    PRINT_AND_THROW( boost::format("matrix K has wrong size. expected %ix%i got %ix%i")%n%n%K.rows()%K.cols());
+  }
+}
+
+void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
+  cout << "TpsCostConstraintInfo::hatch start" << endl;
+  TpsCost* tps_cost = new TpsCost(prob.GetVars(), prob.GetExtVars(), lambda, alpha, beta, X_s_new, X_s, K, X_g);
+  prob.addCost(CostPtr(tps_cost));
+  prob.getCosts().back()->setName(name);
+
+  cout << "tps_vars " << endl;
+  VarArray tps_vars = prob.GetExtVars();
+  int d = X_s.rows();
+  int n = X_s.cols();
+
+  cout << "A " << endl;
+  VarArray A_right = tps_vars.block(0, 0, (n-(d+1))*d, 1);
+  A_right.resize(n-(d+1), d);
+  AffArray A = TpsCost::multiply(tps_cost->getN(), A_right);
+
+  for (int j = 0; j < A.cols(); ++j) {
+    cout << "j " << j << endl;
+    AffExpr col_sum;
+    for (int i = 0; i < A.rows(); ++i) {
+      exprInc(col_sum, A(i, j));
+    }
+    cout << col_sum << endl;
+    prob.addLinearConstraint(col_sum, EQ);
+  }
+  cout << "TpsCostConstraintInfo::hatch end" << endl;
+}
 }
 

@@ -56,6 +56,9 @@ public:
   VarArray& GetVars() {
     return m_traj_vars;
   }
+  VarArray& GetExtVars() {
+    return m_ext_vars;
+  }
   int GetNumSteps() {return m_traj_vars.rows();}
   int GetNumDOF() {return m_traj_vars.cols();}
   ConfigurationPtr GetRAD() {return m_rad;}
@@ -278,5 +281,20 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
 };
 
 
+struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
+  double lambda;
+  double alpha;
+  double beta;
+  MatrixXd X_s_new;
+  MatrixXd X_s;
+  MatrixXd K;
+  MatrixXd X_g;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(TpsCostConstraintInfo)
+
+  private:
+    void fromJsonMatrix(MatrixXd& data, const Value& v);
+};
 
 }

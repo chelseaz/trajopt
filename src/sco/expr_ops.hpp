@@ -89,7 +89,8 @@ inline QuadExpr exprMult(QuadExpr a, double b) {
   exprScale(a, b);
   return a;
 }
-
+QuadExpr exprMult(AffExpr a, const Var& b);
+QuadExpr exprMult(AffExpr a, AffExpr b);
 
 
 inline AffExpr exprAdd(AffExpr a, double b) {
@@ -166,5 +167,6 @@ QuadExpr exprSquare(const AffExpr&);
 AffExpr cleanupAff(const AffExpr&);
 QuadExpr cleanupQuad(const QuadExpr&); //warning: might make it non-psd!
 
-
+AffExpr combineRepeatedTermsAff(const AffExpr&);
+QuadExpr combineRepeatedTermsQuad(const QuadExpr&);
 }
