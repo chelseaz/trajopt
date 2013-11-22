@@ -111,30 +111,6 @@ QuadExpr combineRepeatedTermsQuad(const QuadExpr& q) {
   QuadExpr out;
   out.affexpr = combineRepeatedTermsAff(q.affexpr);
 
-  /*
-  std::map<string, int> varStrToTermIndex;
-  for (size_t i = 0; i < q.size(); ++i) {
-    Var var1 = q.vars1[i];
-    Var var2 = q.vars2[i];
-    string varsStr;
-    std::stringstream varsSS;
-    if (var1.var_rep->index <= var2.var_rep->index) {
-      varsSS << var1.var_rep->index << "_" << var2.var_rep->index;
-    } else {
-      varsSS << var2.var_rep->index << "_" << var1.var_rep->index;
-    }
-    varsStr = varsSS.str();
-    if (varStrToTermIndex.find(varsStr) == varStrToTermIndex.end()) {
-      varStrToTermIndex[varsStr] = out.coeffs.size();
-      out.vars1.push_back(var1);
-      out.vars2.push_back(var2);
-      out.coeffs.push_back(q.coeffs[i]);
-    } else {
-      out.coeffs[varStrToTermIndex[varsStr]] += q.coeffs[i];
-    }
-  }
-  */
-
   std::map<long, int> indPairToTermIndex;
   for (size_t i = 0; i < q.size(); ++i) {
     int ind1 = q.vars1[i].var_rep->index;

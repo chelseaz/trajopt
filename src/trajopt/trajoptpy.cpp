@@ -188,6 +188,16 @@ public:
     }
     return out;
   }
+  py::object GetExt() {
+    TrajArray &ext = m_result->ext;
+    py::object out = np_mod.attr("empty")(py::make_tuple(ext.rows(), ext.cols()));
+    for (int i = 0; i < ext.rows(); ++i) {
+      for (int j = 0; j < ext.cols(); ++j) {
+        out[i][j] = ext(i, j);
+      }
+    }
+    return out;
+  }
   py::object __str__() {
     return GetCosts().attr("__str__")() + GetConstraints().attr("__str__")();
   }
@@ -343,6 +353,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
       .def("GetCosts", &PyTrajOptResult::GetCosts)
       .def("GetConstraints", &PyTrajOptResult::GetConstraints)
       .def("GetTraj", &PyTrajOptResult::GetTraj)
+      .def("GetExt", &PyTrajOptResult::GetExt)
       .def("__str__", &PyTrajOptResult::__str__)
       ;
 

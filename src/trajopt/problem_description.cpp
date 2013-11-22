@@ -249,6 +249,7 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
     cnt_names.push_back(cnt->name());
   }
   traj = getTraj(opt.x, prob.GetVars());
+  ext = getTraj(opt.x, prob.GetExtVars());
 }
 
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
@@ -654,23 +655,19 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
-  cout << "tps_vars " << endl;
   VarArray tps_vars = prob.GetExtVars();
   int d = X_s.rows();
   int n = X_s.cols();
 
-  cout << "A " << endl;
   VarArray A_right = tps_vars.block(0, 0, (n-(d+1))*d, 1);
   A_right.resize(n-(d+1), d);
   AffArray A = TpsCost::multiply(tps_cost->getN(), A_right);
 
   for (int j = 0; j < A.cols(); ++j) {
-    cout << "j " << j << endl;
     AffExpr col_sum;
     for (int i = 0; i < A.rows(); ++i) {
       exprInc(col_sum, A(i, j));
     }
-    cout << col_sum << endl;
     prob.addLinearConstraint(col_sum, EQ);
   }
   cout << "TpsCostConstraintInfo::hatch end" << endl;

@@ -157,7 +157,8 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lam
   M.middleCols(n-(d+1), d) = X_s.transpose();
   M.rightCols(1) = MatrixXd::Ones(n, 1);
 
-  expr_.affexpr.constant = X_s_new.array().square().sum();
+  QuadExpr exprNorm;
+  exprNorm.affexpr.constant = X_s_new.array().square().sum();
   MatrixXd CtM = -2 * X_s_new * M;
   CtM = Map<MatrixXd>(CtM.data(), 1, n*d);
 
@@ -166,9 +167,9 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lam
     Mblock += M.row(i).transpose() * M.row(i);
   }
 
-  expr_.affexpr.coeffs.reserve(CtM.cols());
+  exprNorm.affexpr.coeffs.reserve(CtM.cols());
   for (int i = 0; i < CtM.cols(); ++i) {
-    expr_.affexpr.coeffs.push_back(CtM(0, i));
+    exprNorm.affexpr.coeffs.push_back(CtM(0, i));
   }
 
   // Note: tps_vars_ is [A B c]', row-wise
@@ -179,11 +180,11 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lam
       tps_vars_colwise.push_back(tps_vars_(i*d + j, 0));
     }
   }
-  expr_.affexpr.vars = tps_vars_colwise;
+  exprNorm.affexpr.vars = tps_vars_colwise;
 
-  expr_.coeffs.reserve(n*n*d);
-  expr_.vars1.reserve(n*n*d);
-  expr_.vars2.reserve(n*n*d);
+  exprNorm.coeffs.reserve(n*n*d);
+  exprNorm.vars1.reserve(n*n*d);
+  exprNorm.vars2.reserve(n*n*d);
   for (int dim = 0; dim < d; ++dim) {
     for (int i = 0; i < n; ++i) {
       for (int j = i; j < n; ++j) {
@@ -192,28 +193,47 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lam
         Var var1 = tps_vars_colwise[ii];
         Var var2 = tps_vars_colwise[jj];
         if (i != j) {
-          expr_.coeffs.push_back(2*Mblock(i, j));
+          exprNorm.coeffs.push_back(2*Mblock(i, j));
         } else {
-          expr_.coeffs.push_back(Mblock(i, j));
+          exprNorm.coeffs.push_back(Mblock(i, j));
         }
-        expr_.vars1.push_back(var1);
-        expr_.vars2.push_back(var2);
+        exprNorm.vars1.push_back(var1);
+        exprNorm.vars2.push_back(var2);
       }
     }
   }
   cout << "Constructing AKA" << endl;
 
-	QuadExpr tr_AKA; // lambda * trace(A'*K*A)
-	for (int j = 0; j < A.cols(); ++j) {
-	    for (int i = 0; i < A.rows(); ++i) {
-			exprInc(tr_AKA, exprMult(A(i, j), KA(i, j)));
-		}
-	}
-	cout << "Postprocessing AKA" << endl;
-	exprScale(tr_AKA, lambda);
-	exprInc(expr_, tr_AKA);
-	exprScale(expr_, alpha);
-	cout << "Finished tps cost construction" << endl;
+  MatrixXd NKN = N_.transpose() * K_ * N_;
+  QuadExpr exprTrace;
+  exprTrace.coeffs.reserve(d*NKN.rows()*NKN.cols());
+  exprTrace.vars1.reserve(d*NKN.rows()*NKN.cols());
+  exprTrace.vars2.reserve(d*NKN.rows()*NKN.cols());
+
+  for (int dim = 0; dim < d; ++dim) {
+      for (int i = 0; i < NKN.rows(); ++i) {
+        for (int j = i; j < NKN.cols(); ++j) {
+          Var var1 = A_right(i, dim);
+          Var var2 = A_right(j, dim);
+          if (i != j) {
+            exprTrace.coeffs.push_back(2*NKN(i, j));
+          } else {
+            exprTrace.coeffs.push_back(NKN(i, j));
+          }
+          exprTrace.vars1.push_back(var1);
+          exprTrace.vars2.push_back(var2);
+        }
+      }
+  }
+
+  cout << "Postprocessing AKA" << endl;
+  expr_ = exprNorm;
+  exprScale(exprTrace, lambda);
+  exprInc(expr_, exprTrace);
+  exprScale(expr_, alpha);
+
+  cout << "Done constructing fast AKA" << endl;
+
 /*
   //alpha*(sum(sum(square(X_s_new' - K*getA(x) - X_s'*getB(x) - ones(n,1)*getc(x).'))) + lambda * trace(getA(x).'*K*getA(x))) + ...
   beta*(sum(sum(square(getTrajPts(x) - warp_pts(getTrajPts(X_g), make_warp(getA(x), getB(x), getc(x), X_s))))));
@@ -234,13 +254,10 @@ double TpsCost::value(const vector<double>& xvec) {
 
   MatrixXd c = tps.bottomRows(d);
 
-
-  double ret = alpha_*((MatrixXd) (X_s_new_.transpose() - K_*A - X_s_.transpose()*B - MatrixXd::Ones(n, 1)*c.transpose())).array().square().sum() + lambda_ * (A.transpose() * K_ * A).trace();
+  double ret = alpha_*(((MatrixXd) (X_s_new_.transpose() - K_*A - X_s_.transpose()*B - MatrixXd::Ones(n, 1)*c.transpose())).array().square().sum() + lambda_ * (A.transpose() * K_ * A).trace());
 	cout << "value check " << ret << " " << expr_.value(xvec) << endl;
 
 	return ret;
-
-  //return (diffAxis0(tps).array().square().matrix() * coeffs_.asDiagonal()).sum();
 }
 
 ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {

@@ -89,6 +89,7 @@ struct TRAJOPT_API TrajOptResult {
   vector<string> cost_names, cnt_names;
   vector<double> cost_vals, cnt_viols;
   TrajArray traj;
+  TrajArray ext;
   TrajOptResult(OptResults& opt, TrajOptProb& prob);
 };
 

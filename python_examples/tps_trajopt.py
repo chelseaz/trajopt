@@ -34,10 +34,14 @@ init_joint_target = ku.ik_for_link(hmat_target, manip, "r_gripper_tool_frame",
 
 x_nd = np.load('./x_nd.npy')
 xtarg_nd = np.load('./xtarg_nd.npy')
+lin_ag = np.load('./lin_ag.npy')
+trans_g = np.load('./trans_g.npy')
+w_ng = np.load('./w_ng.npy')
+x_na = np.load('./x_na.npy')
 
 # TODO: remove truncation of x after testing
-#x_nd = x_nd[0:15, 0:3];
-#xtarg_nd = xtarg_nd[0:15, 0:3];
+#x_nd = x_nd[0:5, 0:3];
+#xtarg_nd = xtarg_nd[0:5, 0:3];
 
 (n, d) = x_nd.shape
 tps_dim = (n-(d+1))*d + d*d + d;
