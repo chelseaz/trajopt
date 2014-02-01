@@ -93,7 +93,7 @@ ConvexObjectivePtr JointAccCost::convex(const vector<double>& x, Model* model) {
   return out;
 }
 
-AffArray TpsCost::multiply(MatrixXd A, VarArray B) {
+AffArray OldTpsCost::multiply(MatrixXd A, VarArray B) {
 	AffArray C(A.rows(), B.cols());
 	for (int i = 0; i < A.rows(); i++) {
 		for (int j = 0; j < B.cols(); j++) {
@@ -107,7 +107,7 @@ AffArray TpsCost::multiply(MatrixXd A, VarArray B) {
 	return C;
 }
 
-AffArray TpsCost::multiply(MatrixXd A, AffArray B) {
+AffArray OldTpsCost::multiply(MatrixXd A, AffArray B) {
 	AffArray C(A.rows(), B.cols());
 	for (int i = 0; i < A.rows(); i++) {
 		for (int j = 0; j < B.cols(); j++) {
@@ -121,9 +121,9 @@ AffArray TpsCost::multiply(MatrixXd A, AffArray B) {
 	return C;
 }
 
-TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lambda, double alpha, double beta,
+OldTpsCost::OldTpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lambda, double alpha, double beta,
 		const MatrixXd& X_s_new, const MatrixXd& X_s, const MatrixXd& K, const MatrixXd& X_g) :
-    Cost("Tps"), traj_vars_(traj_vars), tps_vars_(tps_vars), lambda_(lambda), alpha_(alpha), beta_(beta), X_s_new_(X_s_new), X_s_(X_s), K_(K), X_g_(X_g) {
+    Cost("OldTps"), traj_vars_(traj_vars), tps_vars_(tps_vars), lambda_(lambda), alpha_(alpha), beta_(beta), X_s_new_(X_s_new), X_s_(X_s), K_(K), X_g_(X_g) {
 
 	int n_steps = traj_vars.rows();
 	int n_dof = traj_vars.cols();
@@ -240,7 +240,7 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lam
  */
 }
 
-double TpsCost::value(const vector<double>& xvec) {
+double OldTpsCost::value(const vector<double>& xvec) {
   MatrixXd tps = getTraj(xvec, tps_vars_);
   int d = X_s_.rows();
   int n = X_s_.cols();
@@ -260,14 +260,14 @@ double TpsCost::value(const vector<double>& xvec) {
 	return ret;
 }
 
-ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
+ConvexObjectivePtr OldTpsCost::convex(const vector<double>& x, Model* model) {
   ConvexObjectivePtr out(new ConvexObjective(model));
   out->addQuadExpr(expr_);
   return out;
 }
 
-Tps2Cost::Tps2Cost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A) :
-    Cost("Tps2"), traj_vars_(traj_vars), tps_vars_(tps_vars), H_(H), f_(f), A_(A) {
+TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A) :
+    Cost("Tps"), traj_vars_(traj_vars), tps_vars_(tps_vars), H_(H), f_(f), A_(A) {
   /**
    * solve equality-constrained qp
    * min tr(x'Hx) + sum(f'x)
@@ -331,14 +331,14 @@ Tps2Cost::Tps2Cost(const VarArray& traj_vars, const VarArray& tps_vars, const Ma
   exprInc(expr_, exprSumfNz);
 }
 
-double Tps2Cost::value(const vector<double>& xvec) {
+double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
   double ret = (z.transpose() * NHN_ * z).trace() + (fN_ * z).sum();
   cout << "value check " << ret << " " << expr_.value(xvec) << endl;
   return ret;
 }
 
-ConvexObjectivePtr Tps2Cost::convex(const vector<double>& x, Model* model) {
+ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
   ConvexObjectivePtr out(new ConvexObjective(model));
   out->addQuadExpr(expr_);
   return out;

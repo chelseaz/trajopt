@@ -43,9 +43,9 @@ private:
   QuadExpr expr_;
 };
 
-class TRAJOPT_API TpsCost : public Cost {
+class TRAJOPT_API OldTpsCost : public Cost {
 public:
-  TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lambda, double alpha, double beta, const MatrixXd& X_s_new, const MatrixXd& X_s, const MatrixXd& K, const MatrixXd& X_g);
+  OldTpsCost(const VarArray& traj_vars, const VarArray& tps_vars, double lambda, double alpha, double beta, const MatrixXd& X_s_new, const MatrixXd& X_s, const MatrixXd& K, const MatrixXd& X_g);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
   static AffArray multiply(MatrixXd A, VarArray B);
@@ -67,14 +67,14 @@ private:
   QuadExpr expr_;
 };
 
-class TRAJOPT_API Tps2Cost : public Cost {
+class TRAJOPT_API TpsCost : public Cost {
   /**
    * solve equality-constrained qp
    * min tr(x'Hx) + sum(f'x)
    * s.t. Ax = 0
    */
 public:
-  Tps2Cost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A);
+  TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
 private:

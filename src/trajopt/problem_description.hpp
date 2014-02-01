@@ -283,7 +283,7 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
 };
 
 
-struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
+struct OldTpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
   double lambda;
   double alpha;
   double beta;
@@ -293,19 +293,19 @@ struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesCo
   MatrixXd X_g;
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
-  DEFINE_CREATE(TpsCostConstraintInfo)
+  DEFINE_CREATE(OldTpsCostConstraintInfo)
 
   private:
     void fromJsonMatrix(MatrixXd& data, const Value& v);
 };
 
-struct Tps2CostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
+struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
   MatrixXd H;
   MatrixXd f;
   MatrixXd A;
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
-  DEFINE_CREATE(Tps2CostConstraintInfo)
+  DEFINE_CREATE(TpsCostConstraintInfo)
 };
 
 

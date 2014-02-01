@@ -10,6 +10,7 @@ import json
 import numpy as np
 import trajoptpy.kin_utils as ku
 from rapprentice import tps, registration
+import IPython as ipy
 
 env = openravepy.Environment()
 env.StopSimulation()
@@ -32,64 +33,20 @@ init_joint_target = ku.ik_for_link(hmat_target, manip, "r_gripper_tool_frame",
     filter_options = openravepy.IkFilterOptions.CheckEnvCollisions)
 # END ik
 
-# X_s = np.load('./x_nd.npy')
-# K = tps.tps_kernel_matrix(X_s)
-# X_s_new = np.load('./xtarg_nd.npy')
-# lambd = 0.01
-
-# X_s = np.array([[1,1,0], [1,0,0], [0,0,0], [0,1,0], [0.5,0.5,0]])
-# X_s = np.r_[X_s, X_s+np.array([0,0,1])]
-# K = tps.tps_kernel_matrix(X_s)
-# X_s_new = X_s
-# lambd = 0.01
-
-import scipy.io
-tps_data = scipy.io.loadmat('/home/alex/rll/matlab/lfd-tps-trajopt/validation/tps_data.mat')
-X_s = tps_data['X_s']
-K = tps_data['K']
-X_s_new = tps_data['X_s_new']
-lambd = tps_data['lambda'][0,0]
-
-f = registration.fit_ThinPlateSpline(X_s, X_s_new, bend_coef = lambd, wt_n=None, rot_coef = np.r_[0,0,0])
-A_r = f.w_ng
-B_r = f.lin_ag
-c_r = f.trans_g
-
-(n, d) = X_s.shape
-tps_dim = (n-(d+1))*d + d*d + d;
-
-def nullspace(A, atol=1e-13, rtol=0):
-    A = np.atleast_2d(A)
-    u, s, vh = np.linalg.svd(A)
-    tol = max(atol, rtol * s[0])
-    nnz = (s >= tol).sum()
-    ns = vh[nnz:].conj().T
-    return ns
-N = nullspace(np.r_[X_s.T, np.ones((1,n))]);
-
-# import scipy.io
-# f = registration.fit_ThinPlateSpline(X_s, X_s_new, bend_coef = lambd, wt_n=None, rot_coef = np.r_[0,0,0])
-# tps_data = {}
-# tps_data['X_s'] = X_s
-# tps_data['K'] = tps.tps_kernel_matrix(X_s)
-# tps_data['N'] = N
-# tps_data['X_s_new'] = X_s_new
-# tps_data['lambda'] = lambd
-# tps_data['A'] = f.w_ng
-# tps_data['B'] = f.lin_ag
-# tps_data['c'] = f.trans_g
-# scipy.io.savemat('/home/alex/rll/matlab/lfd-tps-trajopt/validation/tps_data.mat', mdict=tps_data)
-
-
-# TODO: remove truncation of x after testing
-#x_nd = x_nd[0:5, 0:3];
-#xtarg_nd = xtarg_nd[0:5, 0:3];
-
+H = np.load("H.npy")
+f = np.load("f.npy")
+A = np.load("A.npy")
+_u,_s,_vh = np.linalg.svd(A.T)
+n_cnts = A.shape[0]
+N = _u[:,n_cnts:]
+z = np.linalg.solve(2*N.T.dot(H.dot(N)), -N.T.dot(f)) # John doesn't have the factor of 2!
+x = N.dot(z)
 
 request = {
   "basic_info" : {
     "n_steps" : 10,
-    "n_ext" : tps_dim,
+    "m_ext" : z.shape[0], 
+    "n_ext" : z.shape[1],
     "manip" : "rightarm", # see below for valid values
     "start_fixed" : True # i.e., DOF values at first timestep are fixed based on current robot state
   },
@@ -107,15 +64,15 @@ request = {
       "dist_pen" : [0.025] # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
     }
   },
-  {
-    "type" : "tps_cost_cnt",
-    "name" : "tps_cost_cnt",
-    "params" : {
-      "lambda" : lambd,
-      "alpha" : 1,
-      "beta" : 1
+    {
+      "type" : "tps_cost_cnt",
+      "name" : "tps_cost_cnt",
+      "params" : {
+      },
+      "H" : [row.tolist() for row in H.T],
+      "f" : f.tolist(),
+      "A" : [row.tolist() for row in A.T]
     }
-  }
   ],
   "constraints" : [
   # BEGIN pose_constraint
@@ -133,32 +90,21 @@ request = {
   # BEGIN init
   "init_info" : {
       "type" : "straight_line", # straight line in joint space.
-      "endpoint" : init_joint_target.tolist() # need to convert numpy array to list
+      "endpoint" : init_joint_target.tolist(), # need to convert numpy array to list
   }
   # END init
 }
-
-A_right = np.zeros((n-(d+1), d))
-B = np.eye(d)
-c = np.zeros((d, 1))
-request["init_info"]["data_ext"] = np.r_[A_right.flatten(), B.flatten(), c.flatten()].tolist()
-
-request["costs"][2]["X_s"] = [row.tolist() for row in X_s.T]
-request["costs"][2]["X_s_new"] = [row.tolist() for row in X_s_new.T]
-request["costs"][2]["X_g"] = [row.tolist() for row in X_s.T]  ## TODO: correct this
-request["costs"][2]["K"] = [row.tolist() for row in K]
-
-if args.position_only: request["constraints"][0]["params"]["rot_coeffs"] = [0,0,0]
 
 s = json.dumps(request) # convert dictionary into json-formatted string
 prob = trajoptpy.ConstructProblem(s, env) # create object that stores optimization problem
 result = trajoptpy.OptimizeProblem(prob) # do optimization
 print result
 
-ext = result.GetExt()
-A = N.dot(ext[0:(n-(d+1))*d].reshape(n-(d+1), d))
-B = ext[(n-(d+1))*d:(n-(d+1))*d+d*d].reshape(d,d)
-c = ext[(n-(d+1))*d+d*d:(n-(d+1))*d+d*d+d].reshape(d,)
+zz = result.GetExt()
+xx = N.dot(zz)
+
+print 'objective as computed by numpy', (x.T.dot(H).dot(x)).trace() + (f.T.dot(x)).sum()
+print 'objective as computed by trajopt', (xx.T.dot(H).dot(xx)).trace() + (f.T.dot(xx)).sum()
 
 from trajoptpy.check_traj import traj_is_safe
 prob.SetRobotActiveDOFs() # set robot DOFs to DOFs in optimization problem
@@ -174,4 +120,3 @@ if args.position_only:
     assert (quat - quat_target).max() > 1e-3
 else:
     assert (quat - quat_target).max() < 1e-3
-

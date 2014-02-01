@@ -49,8 +49,8 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
+  TermInfo::RegisterMaker("old_tps_cost_cnt", &OldTpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_cost_cnt", &TpsCostConstraintInfo::create);
-  TermInfo::RegisterMaker("tps2_cost_cnt", &Tps2CostConstraintInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
@@ -628,7 +628,7 @@ void JointConstraintInfo::hatch(TrajOptProb& prob) {
   }
 }
 
-void TpsCostConstraintInfo::fromJsonMatrix(MatrixXd& data, const Value& v) {
+void OldTpsCostConstraintInfo::fromJsonMatrix(MatrixXd& data, const Value& v) {
   if (v.size() == 0) {
     data.resize(0, 0);
     return;
@@ -641,7 +641,7 @@ void TpsCostConstraintInfo::fromJsonMatrix(MatrixXd& data, const Value& v) {
   }
 }
 
-void TpsCostConstraintInfo::fromJson(const Value& v) {
+void OldTpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
 
@@ -679,9 +679,9 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   }
 }
 
-void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
-  cout << "TpsCostConstraintInfo::hatch start" << endl;
-  TpsCost* tps_cost = new TpsCost(prob.GetVars(), prob.GetExtVars(), lambda, alpha, beta, X_s_new, X_s, K, X_g);
+void OldTpsCostConstraintInfo::hatch(TrajOptProb& prob) {
+  cout << "OldTpsCostConstraintInfo::hatch start" << endl;
+  OldTpsCost* tps_cost = new OldTpsCost(prob.GetVars(), prob.GetExtVars(), lambda, alpha, beta, X_s_new, X_s, K, X_g);
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
@@ -691,7 +691,7 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
 
   VarArray A_right = tps_vars.block(0, 0, (n-(d+1))*d, 1);
   A_right.resize(n-(d+1), d);
-  AffArray A = TpsCost::multiply(tps_cost->getN(), A_right);
+  AffArray A = OldTpsCost::multiply(tps_cost->getN(), A_right);
 
   for (int j = 0; j < A.cols(); ++j) {
     AffExpr col_sum;
@@ -700,10 +700,10 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
     }
     prob.addLinearConstraint(col_sum, EQ);
   }
-  cout << "TpsCostConstraintInfo::hatch end" << endl;
+  cout << "OldTpsCostConstraintInfo::hatch end" << endl;
 }
 
-void Tps2CostConstraintInfo::fromJson(const Value& v) {
+void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
 
@@ -720,7 +720,7 @@ void Tps2CostConstraintInfo::fromJson(const Value& v) {
   Json::fromJson(dataA, A);
 }
 
-void Tps2CostConstraintInfo::hatch(TrajOptProb& prob) {
+void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   cout << "TpsCost2ConstraintInfo::hatch start" << endl;
   VarArray tps_vars = prob.GetExtVars();
   int m_vars = tps_vars.rows();
@@ -733,7 +733,7 @@ void Tps2CostConstraintInfo::hatch(TrajOptProb& prob) {
   assert(A.cols() == m_vars);
   int n_cnts = A.rows();
 
-  Tps2Cost* tps_cost = new Tps2Cost(prob.GetVars(), prob.GetExtVars(), H, f, A);
+  TpsCost* tps_cost = new TpsCost(prob.GetVars(), prob.GetExtVars(), H, f, A);
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
