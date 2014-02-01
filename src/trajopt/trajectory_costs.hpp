@@ -67,5 +67,27 @@ private:
   QuadExpr expr_;
 };
 
+class TRAJOPT_API Tps2Cost : public Cost {
+  /**
+   * solve equality-constrained qp
+   * min tr(x'Hx) + sum(f'x)
+   * s.t. Ax = 0
+   */
+public:
+  Tps2Cost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A);
+  virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
+  virtual double value(const vector<double>&);
+private:
+  VarArray traj_vars_;
+  VarArray tps_vars_;
+  MatrixXd H_;
+  MatrixXd f_;
+  MatrixXd A_;
+  MatrixXd N_;
+  MatrixXd NHN_;
+  MatrixXd fN_;
+  QuadExpr expr_;
+};
+
 }
 

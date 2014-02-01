@@ -50,6 +50,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
   TermInfo::RegisterMaker("tps_cost_cnt", &TpsCostConstraintInfo::create);
+  TermInfo::RegisterMaker("tps2_cost_cnt", &Tps2CostConstraintInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
@@ -111,7 +112,23 @@ void fromJson(const Json::Value& v, Vector4d& x) {
   fromJsonArray(v, vx, 4);
     x = Vector4d(vx[0], vx[1], vx[2], vx[3]);
 }
-
+void fromJson(const Json::Value& v, VectorXd& x) {
+  vector<double> vx;
+  fromJsonArray(v, vx);
+  x = toVectorXd(vx);
+}
+void fromJson(const Json::Value& v, MatrixXd& x) {
+  if (v.size() == 0) {
+    x.resize(0, 0);
+    return;
+  }
+  x.resize(v.size(), v[0].size());
+  for (int i=0; i < v.size(); ++i) {
+    DblVec row;
+    fromJsonArray(v[i], row, v[0].size());
+    x.row(i) = toVectorXd(row);
+  }
+}
 }
 
 namespace trajopt {
@@ -121,6 +138,7 @@ TRAJOPT_API ProblemConstructionInfo* gPCI;
 void BasicInfo::fromJson(const Json::Value& v) {
   childFromJson(v, start_fixed, "start_fixed", true);
   childFromJson(v, n_steps, "n_steps");
+  childFromJson(v, m_ext, "m_ext", 0);
   childFromJson(v, n_ext, "n_ext", 0);
   childFromJson(v, manip, "manip");
   childFromJson(v, robot, "robot", string(""));
@@ -171,6 +189,7 @@ void InitInfo::fromJson(const Json::Value& v) {
   string type_str;
   childFromJson(v, type_str, "type");
   int n_steps = gPCI->basic_info.n_steps;
+  int m_ext = gPCI->basic_info.m_ext;
   int n_ext = gPCI->basic_info.n_ext;
   int n_dof = gPCI->rad->GetDOF();
 
@@ -204,13 +223,21 @@ void InitInfo::fromJson(const Json::Value& v) {
     }
   }
 
-  data_ext.resize(n_ext, 1);
-  if (n_ext > 0) {
-	FAIL_IF_FALSE(v.isMember("data_ext"));
-	const Value& cdata = v["data_ext"];
-	DblVec col;
-	fromJsonArray(cdata, col, n_ext);
-	data_ext.col(0) = toVectorXd(col);
+  if (m_ext > 0 && n_ext > 0) {
+    if (v.isMember("data_ext")) {
+      const Value& vdata = v["data_ext"];
+      if (vdata.size() != m_ext) {
+        PRINT_AND_THROW("given initialization data ext has wrong length");
+      }
+        data_ext.resize(m_ext, n_ext);
+      for (int i=0; i < m_ext; ++i) {
+        DblVec row;
+        fromJsonArray(vdata[i], row, n_ext);
+        data_ext.row(i) = toVectorXd(row);
+      }
+    } else {
+      data_ext = MatrixXd::Zero(m_ext, n_ext);
+    }
   }
 }
 
@@ -274,9 +301,10 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
 
   const BasicInfo& bi = pci.basic_info;
   int n_steps = bi.n_steps;
+  int m_ext = bi.m_ext;
   int n_ext = bi.n_ext;
 
-  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, n_ext));
+  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
   int n_dof = prob->m_rad->GetDOF();
 
   DblVec cur_dofvals = prob->m_rad->GetDOFValues();
@@ -317,7 +345,7 @@ TrajOptProbPtr ConstructProblem(const Json::Value& root, OpenRAVE::EnvironmentBa
 }
 
 
-TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int n_ext) : m_rad(rad) {
+TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext) : m_rad(rad) {
   DblVec lower, upper;
   m_rad->GetDOFLimits(lower, upper);
   int n_dof = m_rad->GetDOF();
@@ -341,11 +369,13 @@ TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int n_ext) : m_rad(r
   m_traj_vars = VarArray(n_steps, n_dof, trajvarvec.data());
 
   vector<string> ext_names;
-  for (int i=0; i < n_ext; ++i) {
-	  ext_names.push_back( (boost::format("e_%i")%i).str() );
+  for (int i=0; i < m_ext; ++i) {
+    for (int j=0; j < n_ext; ++j) {
+      ext_names.push_back( (boost::format("e_%i_%i")%i%j).str() );
+    }
   }
   VarVector extvarvec = createVariables(ext_names);
-  m_ext_vars = VarArray(n_ext, 1, extvarvec.data());
+  m_ext_vars = VarArray(m_ext, n_ext, extvarvec.data());
 
   m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars));
 
@@ -672,5 +702,53 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   }
   cout << "TpsCostConstraintInfo::hatch end" << endl;
 }
+
+void Tps2CostConstraintInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+
+  FAIL_IF_FALSE(v.isMember("H"));
+  const Value& dataH = v["H"];
+  Json::fromJson(dataH, H);
+
+  FAIL_IF_FALSE(v.isMember("f"));
+  const Value& dataf = v["f"];
+  Json::fromJson(dataf, f);
+
+  FAIL_IF_FALSE(v.isMember("A"));
+  const Value& dataA = v["A"];
+  Json::fromJson(dataA, A);
 }
 
+void Tps2CostConstraintInfo::hatch(TrajOptProb& prob) {
+  cout << "TpsCost2ConstraintInfo::hatch start" << endl;
+  VarArray tps_vars = prob.GetExtVars();
+  int m_vars = tps_vars.rows();
+  int dim = tps_vars.cols();
+  assert(dim == 3);
+  assert(H.rows() == m_vars);
+  assert(H.cols() == m_vars);
+  assert(f.rows() == m_vars);
+  assert(f.cols() == dim);
+  assert(A.cols() == m_vars);
+  int n_cnts = A.rows();
+
+  Tps2Cost* tps_cost = new Tps2Cost(prob.GetVars(), prob.GetExtVars(), H, f, A);
+  prob.addCost(CostPtr(tps_cost));
+  prob.getCosts().back()->setName(name);
+
+//  for (int d = 0; d < dim; ++d) {
+//    for (int i = 0; i < n_cnts; ++i) {
+//      AffExpr row_sum;
+//      row_sum.coeffs.reserve(m_vars);
+//      row_sum.vars.reserve(m_vars);
+//      for (int j = 0; j < m_vars; ++j) {
+//        row_sum.coeffs.push_back(A(i,j));
+//        row_sum.vars.push_back(tps_vars(j,d));
+//      }
+//      prob.addLinearConstraint(row_sum, EQ);
+//    }
+//  }
+  cout << "TpsCost2ConstraintInfo::hatch end" << endl;
+}
+}

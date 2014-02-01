@@ -45,7 +45,7 @@ enum TermType {
 class TRAJOPT_API TrajOptProb : public OptProb {
 public:
   TrajOptProb();
-  TrajOptProb(int n_steps, ConfigurationPtr rad, int n_ext);
+  TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext);
   ~TrajOptProb() {}
   VarVector GetVarRow(int i) {
     return m_traj_vars.row(i);
@@ -96,6 +96,7 @@ struct TRAJOPT_API TrajOptResult {
 struct BasicInfo  {
   bool start_fixed;
   int n_steps;
+  int m_ext; // optional
   int n_ext; // optional
   string manip;
   string robot; // optional
@@ -297,5 +298,15 @@ struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesCo
   private:
     void fromJsonMatrix(MatrixXd& data, const Value& v);
 };
+
+struct Tps2CostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
+  MatrixXd H;
+  MatrixXd f;
+  MatrixXd A;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(Tps2CostConstraintInfo)
+};
+
 
 }
