@@ -65,14 +65,11 @@ request = {
     }
   },
     {
-      "type" : "tps_cost_cnt",
-      "name" : "tps_cost_cnt",
-      "params" : {"H" : [row.tolist() for row in H.T],
+      "type" : "tps",
+      "name" : "tps",
+      "params" : {"H" : [row.tolist() for row in H],
                   "f" : f.tolist(),
-                  "A" : [row.tolist() for row in A.T],
-                  "x_na" : [],
-                  "xyzs" : [],
-                  "wxyzs" : [],
+                  "A" : [row.tolist() for row in A],
                   }
     }
   ],

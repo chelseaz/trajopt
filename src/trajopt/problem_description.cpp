@@ -51,7 +51,8 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
   TermInfo::RegisterMaker("old_tps_cost_cnt", &OldTpsCostConstraintInfo::create);
-  TermInfo::RegisterMaker("tps_cost_cnt", &TpsCostConstraintInfo::create);
+  TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
+  TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
@@ -716,37 +717,6 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
 
   FAIL_IF_FALSE(params.isMember("A"));
   Json::fromJson(params["A"], A);
-
-  FAIL_IF_FALSE(params.isMember("x_na"));
-  Json::fromJson(params["x_na"], x_na);
-
-  int n_steps = gPCI->basic_info.n_steps;
-
-  FAIL_IF_FALSE(params.isMember("xyzs"));
-  Json::fromJson(params["xyzs"], xyzs);
-  assert(n_steps == xyzs.rows());
-  assert(3 == xyzs.cols());
-
-  FAIL_IF_FALSE(params.isMember("wxyzs"));
-  Json::fromJson(params["wxyzs"], wxyzs);
-  assert(n_steps == wxyzs.rows());
-  assert(4 == wxyzs.cols());
-
-  if (params.isMember("pos_coeffs")) {
-    Json::fromJson(params["pos_coeffs"], pos_coeffs);
-    assert(n_steps == pos_coeffs.rows());
-    assert(3 == pos_coeffs.cols());
-  } else {
-    pos_coeffs = MatrixXd::Ones(n_steps,3);
-  }
-
-  if (params.isMember("rot_coeffs")) {
-    Json::fromJson(params["rot_coeffs"], rot_coeffs);
-    assert(n_steps == rot_coeffs.rows());
-    assert(3 == rot_coeffs.cols());
-  } else {
-    rot_coeffs = MatrixXd::Ones(n_steps,3);
-  }
 }
 
 void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
@@ -755,25 +725,55 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   VarArray tps_vars = prob.GetExtVars();
   int m_vars = tps_vars.rows();
   int dim = tps_vars.cols();
+  int n = m_vars+dim+1;
   assert(dim == 3);
-  assert(H.rows() == m_vars);
-  assert(H.cols() == m_vars);
-  assert(f.rows() == m_vars);
+  assert(H.rows() == n);
+  assert(H.cols() == n);
+  assert(f.rows() == n);
   assert(f.cols() == dim);
-  assert(A.cols() == m_vars);
+  assert(A.cols() == n);
   int n_cnts = A.rows();
 
   TpsCost* tps_cost = new TpsCost(traj_vars, tps_vars, H, f, A);
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
-  int n_steps = gPCI->basic_info.n_steps;
-  for (int t = 0; t < n_steps; t++) {
-    VarVector dof_tps_vars = concat(traj_vars.row(t), tps_vars.flatten());
-    VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform((Vector4d)wxyzs.row(t), xyzs.row(t)), prob.GetRAD(), link));
-    prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs.row(t), pos_coeffs.row(t)), ABS, name)));
-  }
-
   cout << "TpsCostConstraintInfo::hatch end" << endl;
 }
+
+void TpsPoseCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+  childFromJson(params, xyz,"xyz");
+  childFromJson(params, wxyz,"wxyz");
+  childFromJson(params, pos_coeffs,"pos_coeffs", (Vector3d)Vector3d::Ones());
+  childFromJson(params, rot_coeffs,"rot_coeffs", (Vector3d)Vector3d::Ones());
+
+  FAIL_IF_FALSE(params.isMember("x_na"));
+  Json::fromJson(params["x_na"], x_na);
+
+  string linkstr;
+  childFromJson(params, linkstr, "link");
+  link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+  if (!link) {
+    PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+  }
+
+  const char* all_fields[] = {"timestep", "xyz", "wxyz", "pos_coeffs", "rot_coeffs", "link", "x_na"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
+void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
+  cout << "TpsPoseCostInfo::hatch start" << endl;
+
+  VarArray traj_vars = prob.GetVars();
+  VarArray tps_vars = prob.GetExtVars();
+  VarVector dof_tps_vars = concat(traj_vars.row(timestep), tps_vars.flatten());
+  VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+  prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
+
+  cout << "TpsPoseCostInfo::hatch end" << endl;
+}
+
 }

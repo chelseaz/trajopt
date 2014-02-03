@@ -303,17 +303,22 @@ struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesCo
   MatrixXd H;
   MatrixXd f;
   MatrixXd A;
-  MatrixXd x_na;
-
-  MatrixXd xyzs;
-  MatrixXd wxyzs;
-  MatrixXd pos_coeffs;
-  MatrixXd rot_coeffs;
-  KinBody::LinkPtr link;
 
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(TpsCostConstraintInfo)
+};
+
+struct TpsPoseCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
+  MatrixXd x_na;
+  int timestep;
+  Vector3d xyz;
+  Vector4d wxyz;
+  Vector3d pos_coeffs, rot_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(TpsPoseCostInfo);
 };
 
 }

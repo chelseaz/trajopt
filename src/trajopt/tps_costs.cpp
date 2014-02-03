@@ -190,8 +190,8 @@ MatrixXd ThinPlateSpline::transform_points(const MatrixXd& x_ma) {
 vector<MatrixXd> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
   vector<MatrixXd> grad_mga = tps_grad(x_ma, lin_ag_, trans_g_, w_ng_, x_na_);
   assert(x_ma.cols() == grad_mga.size());
-  assert(grad_mga > 0 ? x_ma.rows() == grad_mga[0].rows() : true);
-  assert(grad_mga > 0 ? x_na_.rows() == grad_mga[0].cols() : true);
+  assert((grad_mga.size() > 0) ? x_ma.rows() == grad_mga[0].rows() : true);
+  assert((grad_mga.size() > 0) ? x_na_.rows() == grad_mga[0].cols() : true);
   return grad_mga;
 }
 
@@ -208,19 +208,20 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const Matr
    */
   int m_vars = tps_vars.rows();
   int dim = tps_vars.cols();
+  int n = m_vars+dim+1;
   assert(dim == 3);
-  assert(tps_vars.cols() == 1);
-  assert(H.rows() == m_vars);
-  assert(H.cols() == m_vars);
-  assert(f.rows() == m_vars);
+  assert(tps_vars.cols() == dim);
+  assert(H.rows() == n);
+  assert(H.cols() == n);
+  assert(f.rows() == n);
   assert(f.cols() == dim);
-  assert(A.cols() == m_vars);
+  assert(A.cols() == n);
   int n_cnts = A.rows();
 
-  JacobiSVD<MatrixXd> svd(A.transpose(), ComputeFullV);
+  JacobiSVD<MatrixXd> svd(A, ComputeFullV);
   VectorXd singular_values = svd.singularValues();
   MatrixXd V = svd.matrixV();
-  int nullity = n_cnts - (dim+1);
+  int nullity = n - (dim+1);
   N_ = V.block(0, V.cols()-nullity, V.rows(), nullity);
 
   NHN_ = N_.transpose()*H*N_;
