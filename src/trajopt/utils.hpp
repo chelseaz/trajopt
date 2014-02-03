@@ -20,6 +20,8 @@ inline Vector4d toVector4d(const OR::Vector& v) {
 }
 Eigen::Matrix3d toRot(const OR::Vector& rq);
 
+OR::Transform toRaveTransform(const Matrix3d& m, const Vector3d& p);
+
 inline OR::Transform toRaveTransform(const Vector4d& q, const Vector3d& p) {
   return OR::Transform(OR::Vector(q[0], q[1], q[2], q[3]),
                        OR::Vector(p[0], p[1], p[2]));

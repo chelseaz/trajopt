@@ -767,15 +767,12 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
-  //TODO check factor of 2 issue
-  /*
   int n_steps = gPCI->basic_info.n_steps;
   for (int t = 0; t < n_steps; t++) {
     VarVector dof_tps_vars = concat(traj_vars.row(t), tps_vars.flatten());
-    VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform(wxyzs.row(t), xyzs.row(t)), prob.GetRAD(), link));
+    VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform((Vector4d)wxyzs.row(t), xyzs.row(t)), prob.GetRAD(), link));
     prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs.row(t), pos_coeffs.row(t)), ABS, name)));
   }
-  */
 
   cout << "TpsCostConstraintInfo::hatch end" << endl;
 }

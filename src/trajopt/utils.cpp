@@ -31,6 +31,12 @@ Eigen::Matrix3d toRot(const OR::Vector& rq) {
   return T.rotation();
 }
 
+OR::Transform toRaveTransform(const Matrix3d& m, const Vector3d& p) {
+  Eigen::Quaterniond q(m);
+  return OR::Transform(OR::Vector(q.w(), q.x(), q.y(), q.z()),
+                       OR::Vector(p[0], p[1], p[2]));
+}
+
 
 void AddVarArrays(OptProb& prob, int rows, const vector<int>& cols, const vector<string>& name_prefix, const vector<VarArray*>& newvars) {
   int n_arr = name_prefix.size();

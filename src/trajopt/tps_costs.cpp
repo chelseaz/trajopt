@@ -89,61 +89,64 @@ vector<MatrixXd> tps_grad(const MatrixXd& x_ma, const MatrixXd& lin_ag, const Ve
   return grad_mga;
 }
 
+Matrix3d orthogonalize3_cross(const Matrix3d& mat) {
+  Vector3d x_n3 = mat.col(0);
+  Vector3d z_n3 = mat.col(2);
+
+  Vector3d znew_n3 = z_n3.normalized();
+  Vector3d ynew_n3 = znew_n3.cross(x_n3).normalized();
+  Vector3d xnew_n3 = ynew_n3.cross(znew_n3).normalized();
+
+  Matrix3d new_mat;
+  new_mat.col(0) = xnew_n3;
+  new_mat.col(1) = ynew_n3;
+  new_mat.col(2) = znew_n3;
+
+  return new_mat;
+}
+
 vector<Matrix3d> Transformation::transform_bases(const MatrixXd& x_ma, const vector<Matrix3d>& rot_mad) {
-  //TODO
-/*
-     def transform_bases(self, x_ma, rot_mad, orthogonalize=True, orth_method = "cross"):
-        """
-        orthogonalize: none, svd, qr
-        """
+  int k = x_ma.rows();
+  assert(k == rot_mad.size());
 
-        grad_mga = self.compute_jacobian(x_ma)
-        newrot_mgd = np.array([grad_ga.dot(rot_ad) for (grad_ga, rot_ad) in zip(grad_mga, rot_mad)])
+  vector<MatrixXd> grad_mga = compute_jacobian(x_ma);
+  assert(k == grad_mga.size());
+  vector<Matrix3d> newrot_mgd(k);
+  for (int a = 0; a < k; a++) {
+    newrot_mgd[a] = orthogonalize3_cross(grad_mga[a] * rot_mad[a]);
+  }
 
-
-        if orthogonalize:
-            if orth_method == "qr":
-                newrot_mgd =  orthogonalize3_qr(newrot_mgd)
-            elif orth_method == "svd":
-                newrot_mgd = orthogonalize3_svd(newrot_mgd)
-            elif orth_method == "cross":
-                newrot_mgd = orthogonalize3_cross(newrot_mgd)
-            else: raise Exception("unknown orthogonalization method %s"%orthogonalize)
-        return newrot_mgd
-*/
+  return newrot_mgd;
 }
 
 vector<OR::Transform> Transformation::transform_hmats(const vector<OR::Transform>& hmat_mAD) {
-  //TODO
-/*
-
-    def transform_hmats(self, hmat_mAD):
-        """
-        Transform (D+1) x (D+1) homogenius matrices
-        """
-        hmat_mGD = np.empty_like(hmat_mAD)
-        hmat_mGD[:,:3,3] = self.transform_points(hmat_mAD[:,:3,3])
-        hmat_mGD[:,:3,:3] = self.transform_bases(hmat_mAD[:,:3,3], hmat_mAD[:,:3,:3])
-        hmat_mGD[:,3,:] = np.array([0,0,0,1])
-        return hmat_mGD
-*/
+  int k = hmat_mAD.size();
+  MatrixXd hmat_mAD_trans(k,3);
+  vector<Matrix3d> hmat_mAD_rot(k);
+  for (int a = 0; a < k; a++) {
+    hmat_mAD_trans.row(a) = toVector3d(hmat_mAD[a].trans);
+    hmat_mAD_rot[a] = toRot(hmat_mAD[a].rot);
+  }
+  MatrixXd hmat_mGD_trans = transform_points(hmat_mAD_trans);
+  vector<Matrix3d> hmat_mGD_rot = transform_bases(hmat_mAD_trans, hmat_mAD_rot);
+  vector<OR::Transform> hmat_mGD(k);
+  for (int a = 0; a < k; a++) {
+    hmat_mGD[a] = toRaveTransform(hmat_mGD_rot[a], hmat_mGD_trans.row(a));
+  }
+  return hmat_mGD;
 }
 
 MatrixXd Transformation::compute_numerical_jacobian(const MatrixXd& x_d, double epsilon) {
-  //TODO
-/*
-def compute_numerical_jacobian(self, x_d, epsilon=0.0001):
-    "numerical jacobian"
-    x0 = np.asfarray(x_d)
-    f0 = self.transform_points(x0)
-    jac = np.zeros(len(x0), len(f0))
-    dx = np.zeros(len(x0))
-    for i in range(len(x0)):
-        dx[i] = epsilon
-        jac[i] = (self.transform_points(x0+dx) - f0) / epsilon
-        dx[i] = 0.
-    return jac.transpose()
-*/
+  MatrixXd x0 = x_d;
+  MatrixXd f0 = transform_points(x0);
+  MatrixXd jac(x0.rows(), f0.rows());
+  VectorXd dx = VectorXd::Zero(x0.rows());
+  for (int i = 0; i < x0.rows(); i++) {
+    dx(i) = epsilon;
+    jac.row(i) = transform_points(x0.colwise()+dx) / epsilon;
+    dx(i) = 0;
+  }
+  return jac.transpose();
 }
 
 
