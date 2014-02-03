@@ -311,6 +311,7 @@ struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesCo
 
 struct TpsPoseCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
   MatrixXd x_na;
+  MatrixXd A;
   int timestep;
   Vector3d xyz;
   Vector4d wxyz;

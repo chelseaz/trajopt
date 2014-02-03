@@ -9,13 +9,14 @@ namespace trajopt {
 class Transformation {
   public:
     virtual MatrixXd transform_points(const MatrixXd& x_ma) = 0;
-    virtual vector<MatrixXd> compute_jacobian(const MatrixXd& x_ma) = 0;
+    virtual vector<Matrix3d> compute_jacobian(const MatrixXd& x_ma) = 0;
     vector<Matrix3d> transform_bases(const MatrixXd& x_ma, const vector<Matrix3d>& rot_mad);
     vector<OR::Transform> transform_hmats(const vector<OR::Transform>& hmat_mAD);
     MatrixXd compute_numerical_jacobian(const MatrixXd& x_d, double epsilon = 0.0001);
 };
 
 class ThinPlateSpline : public Transformation {
+public: //TODO should be private
   MatrixXd x_na_;    // (n,d), centers of basis functions
   MatrixXd w_ng_;    // (n,d)
   MatrixXd lin_ag_;  // (d,d),_transpose of linear part, so you take x_na.dot(lin_ag)
@@ -25,10 +26,10 @@ class ThinPlateSpline : public Transformation {
 public:
   ThinPlateSpline(double d = 3); // identity transformation
   ThinPlateSpline(const MatrixXd& x_na);
-  ThinPlateSpline(const MatrixXd& theta, const MatrixXd& x_na); // theta is (n+d+1, d)
+  ThinPlateSpline(const MatrixXd& theta, const MatrixXd& x_na); // theta has dimension (n+d+1, d)
   void setTheta(const MatrixXd& theta);
   MatrixXd transform_points(const MatrixXd& x_ma);
-  vector<MatrixXd> compute_jacobian(const MatrixXd& x_ma);
+  vector<Matrix3d> compute_jacobian(const MatrixXd& x_ma);
 };
 
 class TRAJOPT_API TpsCost : public Cost {
@@ -55,20 +56,14 @@ private:
 
 struct TpsCartPoseErrCalculator : public VectorOfVector {
   MatrixXd x_na_;
+  MatrixXd N_;
   OR::Transform src_pose_;
   ConfigurationPtr manip_;
   OR::KinBody::LinkPtr link_;
   int n_dof_;
   int n_;
   int d_;
-  TpsCartPoseErrCalculator(const MatrixXd& x_na, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
-    x_na_(x_na),
-    src_pose_(src_pose),
-    manip_(manip),
-    link_(link),
-    n_dof_(manip->GetDOF()),
-    n_(x_na.rows()),
-    d_(x_na.cols()) {}
+  TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
   VectorXd operator()(const VectorXd& dof_theta_vals) const;
 };
 

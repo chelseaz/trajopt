@@ -12,6 +12,20 @@ using namespace std;
 using namespace sco;
 using namespace Eigen;
 
+#define pM(a) std::cout << #a << ".shape = (" << ((a).rows()) << ", " << ((a).cols()) << ")" << std::endl
+
+void printNpArray(const MatrixXd& m) {
+  cout << "np.array([";
+  for (int i = 0; i < m.rows(); i++) {
+    cout << "[";
+    for (int j = 0; j < m.cols(); j++) {
+      cout << m(i,j) << ",";
+    }
+    cout << "],";
+  }
+  cout << "])";
+}
+
 namespace {
 
 inline Vector3d rotVec(const OpenRAVE::Vector& q) {
@@ -21,6 +35,43 @@ inline Vector3d rotVec(const OpenRAVE::Vector& q) {
 }
 
 namespace trajopt {
+
+void python_check_transform_hmats(ThinPlateSpline& f, const OR::Transform& src_pose, const OR::Transform& warped_src_pose) {
+  // python code to verify transform_hmats
+  cout << "f = ThinPlateSpline()" << endl;
+  cout << "f.lin_ag=";
+  printNpArray(f.lin_ag_);
+  cout << endl;
+  cout << "f.trans_g=";
+  printNpArray(f.trans_g_);
+  cout << endl;
+  cout << "f.trans_g = f.trans_g[:,0]" << endl;
+  cout << "f.w_ng=";
+  printNpArray(f.w_ng_);
+  cout << endl;
+  cout << "f.x_na=";
+  printNpArray(f.x_na_);
+  cout << endl;
+
+  cout << "src_pose = np.eye(4)" << endl;
+  cout << "src_pose[:3,3] = ";
+  printNpArray(toVector3d(src_pose.trans));
+  cout << ".T" << endl;
+  cout << "src_pose[:3,:3] = ";
+  printNpArray(toRot(src_pose.rot));
+  cout << endl;
+
+  cout << "warped_src_pose = np.eye(4)" << endl;
+  cout << "warped_src_pose[:3,3] = ";
+  printNpArray(toVector3d(warped_src_pose.trans));
+  cout << ".T" << endl;
+  cout << "warped_src_pose[:3,:3] = ";
+  printNpArray(toRot(warped_src_pose.rot));
+  cout << endl;
+
+  cout << "print f.transform_hmats(np.array([src_pose]))" << endl;
+  cout << "print warped_src_pose" << endl;
+}
 
 MatrixXd cdist(const MatrixXd& A, const MatrixXd& B) {
   int m_A = A.rows();
@@ -53,7 +104,7 @@ MatrixXd tps_kernel_matrix2(const MatrixXd& x_na, const MatrixXd& y_ma) {
 
 MatrixXd tps_eval(const MatrixXd& x_ma, const MatrixXd& lin_ag, const VectorXd& trans_g, const MatrixXd& w_ng, const MatrixXd& x_na) {
   MatrixXd K_mn = tps_kernel_matrix2(x_ma, x_na);
-  return ((MatrixXd)(K_mn * w_ng + x_ma * lin_ag)).rowwise() + trans_g;
+  return ((MatrixXd)(K_mn * w_ng + x_ma * lin_ag)).rowwise() + trans_g.transpose();
 }
 
 // maybe there is better way to do this
@@ -69,7 +120,7 @@ MatrixXd nan2zero(const MatrixXd& m) {
   return out;
 }
 
-vector<MatrixXd> tps_grad(const MatrixXd& x_ma, const MatrixXd& lin_ag, const VectorXd& trans_g, const MatrixXd& w_ng, const MatrixXd& x_na) {
+vector<Matrix3d> tps_grad(const MatrixXd& x_ma, const MatrixXd& lin_ag, const VectorXd& trans_g, const MatrixXd& w_ng, const MatrixXd& x_na) {
   int n = x_na.rows();
   int d = x_na.cols();
   int m = x_ma.rows();
@@ -77,14 +128,19 @@ vector<MatrixXd> tps_grad(const MatrixXd& x_ma, const MatrixXd& lin_ag, const Ve
 
   MatrixXd dist_mn = cdist(x_ma, x_na);
 
-  vector<MatrixXd> grad_mga(d);
+  vector<Matrix3d> grad_mga(m);
 
   MatrixXd lin_ga = lin_ag.transpose();
   for (int a = 0; a < d; a++) {
-    MatrixXd diffa_mn = x_ma.col(a).replicate(1,n).rowwise() - x_na.col(a);
+    MatrixXd diffa_mn = x_ma.col(a).replicate(1,n).rowwise() - x_na.col(a).transpose();
     assert(m == diffa_mn.rows());
     assert(n == diffa_mn.cols());
-    grad_mga[a] = -((nan2zero(diffa_mn.cwiseQuotient(dist_mn)) * w_ng).rowwise() - lin_ga.col(a)); //TODO check this does the right thing
+    MatrixXd tmp = nan2zero(diffa_mn.cwiseQuotient(dist_mn)) * w_ng;
+    assert(tmp.rows() == m);
+    assert(tmp.cols() == d);
+    for (int i = 0; i < m; i++) {
+      grad_mga[i].col(a) = lin_ga.col(a) - tmp.row(i).transpose();
+    }
   }
   return grad_mga;
 }
@@ -106,33 +162,38 @@ Matrix3d orthogonalize3_cross(const Matrix3d& mat) {
 }
 
 vector<Matrix3d> Transformation::transform_bases(const MatrixXd& x_ma, const vector<Matrix3d>& rot_mad) {
-  int k = x_ma.rows();
-  assert(k == rot_mad.size());
+  int m = x_ma.rows();
+  int d = x_ma.cols();
+  assert(m == rot_mad.size());
 
-  vector<MatrixXd> grad_mga = compute_jacobian(x_ma);
-  assert(k == grad_mga.size());
-  vector<Matrix3d> newrot_mgd(k);
-  for (int a = 0; a < k; a++) {
-    newrot_mgd[a] = orthogonalize3_cross(grad_mga[a] * rot_mad[a]);
+  vector<Matrix3d> grad_mga = compute_jacobian(x_ma);
+  assert(m == grad_mga.size());
+
+  vector<Matrix3d> newrot_mgd(m);
+  for (int i = 0; i < m; i++) {
+    newrot_mgd[i] = orthogonalize3_cross(grad_mga[i] * rot_mad[i]);
   }
-
   return newrot_mgd;
 }
 
 vector<OR::Transform> Transformation::transform_hmats(const vector<OR::Transform>& hmat_mAD) {
-  int k = hmat_mAD.size();
-  MatrixXd hmat_mAD_trans(k,3);
-  vector<Matrix3d> hmat_mAD_rot(k);
-  for (int a = 0; a < k; a++) {
-    hmat_mAD_trans.row(a) = toVector3d(hmat_mAD[a].trans);
-    hmat_mAD_rot[a] = toRot(hmat_mAD[a].rot);
+  int m = hmat_mAD.size();
+  MatrixXd hmat_mAD_trans(m,3);
+  vector<Matrix3d> hmat_mAD_rot(m);
+  for (int i = 0; i < m; i++) {
+    hmat_mAD_trans.row(i) = toVector3d(hmat_mAD[i].trans);
+    hmat_mAD_rot[i] = toRot(hmat_mAD[i].rot);
   }
   MatrixXd hmat_mGD_trans = transform_points(hmat_mAD_trans);
   vector<Matrix3d> hmat_mGD_rot = transform_bases(hmat_mAD_trans, hmat_mAD_rot);
-  vector<OR::Transform> hmat_mGD(k);
-  for (int a = 0; a < k; a++) {
-    hmat_mGD[a] = toRaveTransform(hmat_mGD_rot[a], hmat_mGD_trans.row(a));
+  assert(hmat_mGD_trans.rows() == m);
+  assert(hmat_mGD_trans.cols() == 3);
+  assert(hmat_mGD_rot.size() == m);
+  vector<OR::Transform> hmat_mGD(m);
+  for (int i = 0; i < m; i++) {
+    hmat_mGD[i] = toRaveTransform(hmat_mGD_rot[i], hmat_mGD_trans.row(i));
   }
+  assert(hmat_mAD.size() == hmat_mGD.size());
   return hmat_mGD;
 }
 
@@ -173,9 +234,9 @@ ThinPlateSpline::ThinPlateSpline(const MatrixXd& theta, const MatrixXd& x_na) {
 }
 
 void ThinPlateSpline::setTheta(const MatrixXd& theta) {
-  assert((n_+d_+1) == theta.rows());
+  assert(n_+d_+1 == theta.rows());
   assert(d_ == theta.cols());
-  trans_g_ = theta.topRows(1);
+  trans_g_ = theta.row(0);
   lin_ag_ = theta.middleRows(1,d_);
   w_ng_ = theta.bottomRows(n_);
 }
@@ -187,11 +248,12 @@ MatrixXd ThinPlateSpline::transform_points(const MatrixXd& x_ma) {
   return y_ng;
 }
 
-vector<MatrixXd> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
-  vector<MatrixXd> grad_mga = tps_grad(x_ma, lin_ag_, trans_g_, w_ng_, x_na_);
-  assert(x_ma.cols() == grad_mga.size());
-  assert((grad_mga.size() > 0) ? x_ma.rows() == grad_mga[0].rows() : true);
-  assert((grad_mga.size() > 0) ? x_na_.rows() == grad_mga[0].cols() : true);
+vector<Matrix3d> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
+  int m = x_ma.rows();
+  int d = x_ma.cols();
+  assert(d==3);
+  vector<Matrix3d> grad_mga = tps_grad(x_ma, lin_ag_, trans_g_, w_ng_, x_na_);
+  assert(m == grad_mga.size());
   return grad_mga;
 }
 
@@ -206,30 +268,29 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const Matr
    * Let x = Nz
    * then the problem becomes the unconstrained minimization z'NHNz + f'Nz
    */
-  int m_vars = tps_vars.rows();
+  int n = tps_vars.rows();
   int dim = tps_vars.cols();
-  int n = m_vars+dim+1;
   assert(dim == 3);
   assert(tps_vars.cols() == dim);
-  assert(H.rows() == n);
-  assert(H.cols() == n);
-  assert(f.rows() == n);
+  assert(H.rows() == n+dim+1);
+  assert(H.cols() == n+dim+1);
+  assert(f.rows() == n+dim+1);
   assert(f.cols() == dim);
-  assert(A.cols() == n);
+  assert(A.cols() == n+dim+1);
   int n_cnts = A.rows();
 
   JacobiSVD<MatrixXd> svd(A, ComputeFullV);
   VectorXd singular_values = svd.singularValues();
   MatrixXd V = svd.matrixV();
-  int nullity = n - (dim+1);
+  int nullity = n;
   N_ = V.block(0, V.cols()-nullity, V.rows(), nullity);
 
   NHN_ = N_.transpose()*H*N_;
 
   QuadExpr exprTrzNHNz;
-  exprTrzNHNz.coeffs.reserve(NHN_.rows()*NHN_.cols());
-  exprTrzNHNz.vars1.reserve(NHN_.rows()*NHN_.cols());
-  exprTrzNHNz.vars2.reserve(NHN_.rows()*NHN_.cols());
+  exprTrzNHNz.coeffs.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
+  exprTrzNHNz.vars1.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
+  exprTrzNHNz.vars2.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
   for (int d = 0; d < dim; d++) {
     for (int i = 0; i < NHN_.rows(); i++) {
       for (int j = i; j < NHN_.cols(); j++) {
@@ -247,8 +308,8 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const Matr
   fN_ = f.transpose() * N_;
 
   AffExpr exprSumfNz;
-  exprSumfNz.coeffs.reserve(m_vars);
-  exprSumfNz.vars.reserve(m_vars);
+  exprSumfNz.coeffs.reserve(dim * fN_.rows()*fN_.cols());
+  exprSumfNz.vars.reserve(dim * fN_.rows()*fN_.cols());
   for (int d = 0; d < dim; d++) {
     for (int i = 0; i < fN_.rows(); i++) {
       for (int j = 0; j < fN_.cols(); j++) {
@@ -275,10 +336,27 @@ ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
   return out;
 }
 
+TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+  x_na_(x_na),
+  src_pose_(src_pose),
+  manip_(manip),
+  link_(link),
+  n_dof_(manip->GetDOF()),
+  n_(x_na.rows()),
+  d_(x_na.cols())
+{
+  JacobiSVD<MatrixXd> svd(A, ComputeFullV);
+  VectorXd singular_values = svd.singularValues();
+  MatrixXd V = svd.matrixV();
+  int nullity = n_;
+  N_ = V.block(0, V.cols()-nullity, V.rows(), nullity); // N_ has dimension (n+d+1,n)
+}
+
 VectorXd TpsCartPoseErrCalculator::operator()(const VectorXd& dof_theta_vals) const {
   VectorXd dof_vals = dof_theta_vals.topRows(n_dof_);
   VectorXd theta_vals = dof_theta_vals.bottomRows(dof_theta_vals.size() - n_dof_);
-  const MatrixXd theta = Map<const MatrixXd>(theta_vals.data(), n_, 1+d_+n_); //TODO check matrix gotten in right order
+  assert(dof_theta_vals.size() - n_dof_ == n_*d_);
+  MatrixXd theta = N_ * Map<const MatrixXd>(theta_vals.data(), n_, d_);
 
   manip_->SetDOFValues(toDblVec(dof_vals));
   OR::Transform targ_pose = link_->GetTransform();

@@ -723,15 +723,14 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   cout << "TpsCostConstraintInfo::hatch start" << endl;
   VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
-  int m_vars = tps_vars.rows();
+  int n = tps_vars.rows();
   int dim = tps_vars.cols();
-  int n = m_vars+dim+1;
   assert(dim == 3);
-  assert(H.rows() == n);
-  assert(H.cols() == n);
-  assert(f.rows() == n);
+  assert(H.rows() == n+dim+1);
+  assert(H.cols() == n+dim+1);
+  assert(f.rows() == n+dim+1);
   assert(f.cols() == dim);
-  assert(A.cols() == n);
+  assert(A.cols() == n+dim+1);
   int n_cnts = A.rows();
 
   TpsCost* tps_cost = new TpsCost(traj_vars, tps_vars, H, f, A);
@@ -744,14 +743,17 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
 void TpsPoseCostInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
+
+  FAIL_IF_FALSE(params.isMember("x_na"));
+  Json::fromJson(params["x_na"], x_na);
+  FAIL_IF_FALSE(params.isMember("A"));
+  Json::fromJson(params["A"], A);
+
   childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
   childFromJson(params, xyz,"xyz");
   childFromJson(params, wxyz,"wxyz");
   childFromJson(params, pos_coeffs,"pos_coeffs", (Vector3d)Vector3d::Ones());
   childFromJson(params, rot_coeffs,"rot_coeffs", (Vector3d)Vector3d::Ones());
-
-  FAIL_IF_FALSE(params.isMember("x_na"));
-  Json::fromJson(params["x_na"], x_na);
 
   string linkstr;
   childFromJson(params, linkstr, "link");
@@ -760,7 +762,7 @@ void TpsPoseCostInfo::fromJson(const Value& v) {
     PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
   }
 
-  const char* all_fields[] = {"timestep", "xyz", "wxyz", "pos_coeffs", "rot_coeffs", "link", "x_na"};
+  const char* all_fields[] = {"x_na", "A", "timestep", "xyz", "wxyz", "pos_coeffs", "rot_coeffs", "link"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
@@ -770,7 +772,7 @@ void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
   VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
   VarVector dof_tps_vars = concat(traj_vars.row(timestep), tps_vars.flatten());
-  VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+  VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, A, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
 
   cout << "TpsPoseCostInfo::hatch end" << endl;
