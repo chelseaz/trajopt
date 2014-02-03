@@ -34,12 +34,12 @@ init_joint_target = ku.ik_for_link(hmat_target, manip, "r_gripper_tool_frame",
 # END ik
 
 H = np.load("H.npy")
-f = np.load("f.npy")
+f = 2.0*np.load("f.npy")
 A = np.load("A.npy")
 _u,_s,_vh = np.linalg.svd(A.T)
 n_cnts = A.shape[0]
 N = _u[:,n_cnts:]
-z = np.linalg.solve(2*N.T.dot(H.dot(N)), -N.T.dot(f)) # John doesn't have the factor of 2!
+z = np.linalg.solve(2.0*N.T.dot(H.dot(N)), -N.T.dot(f))
 x = N.dot(z)
 
 request = {
