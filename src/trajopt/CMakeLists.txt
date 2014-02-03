@@ -13,7 +13,8 @@ endif()
 
 add_library(trajopt
 	traj_plotter.cpp
-  trajectory_costs.cpp
+	trajectory_costs.cpp
+	tps_costs.cpp 
 	kinematic_terms.cpp 
 	collision_terms.cpp
 	json_marshal.cpp

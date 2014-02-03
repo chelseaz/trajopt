@@ -6,6 +6,7 @@
 #include "sco/expr_op_overloads.hpp"
 #include "trajopt/kinematic_terms.hpp"
 #include "trajopt/trajectory_costs.hpp"
+#include "trajopt/tps_costs.hpp"
 #include "trajopt/collision_terms.hpp"
 #include "trajopt/rave_utils.hpp"
 #include "trajopt/rave_utils.hpp"
@@ -707,21 +708,50 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
 
-  FAIL_IF_FALSE(v.isMember("H"));
-  const Value& dataH = v["H"];
-  Json::fromJson(dataH, H);
+  FAIL_IF_FALSE(params.isMember("H"));
+  Json::fromJson(params["H"], H);
 
-  FAIL_IF_FALSE(v.isMember("f"));
-  const Value& dataf = v["f"];
-  Json::fromJson(dataf, f);
+  FAIL_IF_FALSE(params.isMember("f"));
+  Json::fromJson(params["f"], f);
 
-  FAIL_IF_FALSE(v.isMember("A"));
-  const Value& dataA = v["A"];
-  Json::fromJson(dataA, A);
+  FAIL_IF_FALSE(params.isMember("A"));
+  Json::fromJson(params["A"], A);
+
+  FAIL_IF_FALSE(params.isMember("x_na"));
+  Json::fromJson(params["x_na"], x_na);
+
+  int n_steps = gPCI->basic_info.n_steps;
+
+  FAIL_IF_FALSE(params.isMember("xyzs"));
+  Json::fromJson(params["xyzs"], xyzs);
+  assert(n_steps == xyzs.rows());
+  assert(3 == xyzs.cols());
+
+  FAIL_IF_FALSE(params.isMember("wxyzs"));
+  Json::fromJson(params["wxyzs"], wxyzs);
+  assert(n_steps == wxyzs.rows());
+  assert(4 == wxyzs.cols());
+
+  if (params.isMember("pos_coeffs")) {
+    Json::fromJson(params["pos_coeffs"], pos_coeffs);
+    assert(n_steps == pos_coeffs.rows());
+    assert(3 == pos_coeffs.cols());
+  } else {
+    pos_coeffs = MatrixXd::Ones(n_steps,3);
+  }
+
+  if (params.isMember("rot_coeffs")) {
+    Json::fromJson(params["rot_coeffs"], rot_coeffs);
+    assert(n_steps == rot_coeffs.rows());
+    assert(3 == rot_coeffs.cols());
+  } else {
+    rot_coeffs = MatrixXd::Ones(n_steps,3);
+  }
 }
 
 void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
-  cout << "TpsCost2ConstraintInfo::hatch start" << endl;
+  cout << "TpsCostConstraintInfo::hatch start" << endl;
+  VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
   int m_vars = tps_vars.rows();
   int dim = tps_vars.cols();
@@ -733,22 +763,20 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   assert(A.cols() == m_vars);
   int n_cnts = A.rows();
 
-  TpsCost* tps_cost = new TpsCost(prob.GetVars(), prob.GetExtVars(), H, f, A);
+  TpsCost* tps_cost = new TpsCost(traj_vars, tps_vars, H, f, A);
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
-//  for (int d = 0; d < dim; ++d) {
-//    for (int i = 0; i < n_cnts; ++i) {
-//      AffExpr row_sum;
-//      row_sum.coeffs.reserve(m_vars);
-//      row_sum.vars.reserve(m_vars);
-//      for (int j = 0; j < m_vars; ++j) {
-//        row_sum.coeffs.push_back(A(i,j));
-//        row_sum.vars.push_back(tps_vars(j,d));
-//      }
-//      prob.addLinearConstraint(row_sum, EQ);
-//    }
-//  }
-  cout << "TpsCost2ConstraintInfo::hatch end" << endl;
+  //TODO check factor of 2 issue
+  /*
+  int n_steps = gPCI->basic_info.n_steps;
+  for (int t = 0; t < n_steps; t++) {
+    VarVector dof_tps_vars = concat(traj_vars.row(t), tps_vars.flatten());
+    VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, toRaveTransform(wxyzs.row(t), xyzs.row(t)), prob.GetRAD(), link));
+    prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs.row(t), pos_coeffs.row(t)), ABS, name)));
+  }
+  */
+
+  cout << "TpsCostConstraintInfo::hatch end" << endl;
 }
 }

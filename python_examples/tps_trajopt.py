@@ -67,11 +67,13 @@ request = {
     {
       "type" : "tps_cost_cnt",
       "name" : "tps_cost_cnt",
-      "params" : {
-      },
-      "H" : [row.tolist() for row in H.T],
-      "f" : f.tolist(),
-      "A" : [row.tolist() for row in A.T]
+      "params" : {"H" : [row.tolist() for row in H.T],
+                  "f" : f.tolist(),
+                  "A" : [row.tolist() for row in A.T],
+                  "x_na" : [],
+                  "xyzs" : [],
+                  "wxyzs" : [],
+                  }
     }
   ],
   "constraints" : [
