@@ -644,7 +644,6 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
 }
 
 void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
-  cout << "TpsCostConstraintInfo::hatch start" << endl;
   VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
   int n = tps_vars.rows();
@@ -660,8 +659,6 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   TpsCost* tps_cost = new TpsCost(traj_vars, tps_vars, H, f, A);
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
-
-  cout << "TpsCostConstraintInfo::hatch end" << endl;
 }
 
 void TpsPoseCostInfo::fromJson(const Value& v) {
@@ -691,15 +688,11 @@ void TpsPoseCostInfo::fromJson(const Value& v) {
 }
 
 void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
-  cout << "TpsPoseCostInfo::hatch start" << endl;
-
   VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
   VarVector dof_tps_vars = concat(traj_vars.row(timestep), tps_vars.flatten());
   VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, A, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
-
-  cout << "TpsPoseCostInfo::hatch end" << endl;
 }
 
 }

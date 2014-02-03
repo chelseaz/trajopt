@@ -326,7 +326,7 @@ TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const Matr
 double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
   double ret = (z.transpose() * NHN_ * z).trace() + (fN_ * z).sum();
-  cout << "value check " << ret << " " << expr_.value(xvec) << endl;
+//  cout << "value check " << ret << " " << expr_.value(xvec) << endl;
   return ret;
 }
 
