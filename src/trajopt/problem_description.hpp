@@ -282,23 +282,6 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
   DEFINE_CREATE(JointConstraintInfo)
 };
 
-
-struct OldTpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
-  double lambda;
-  double alpha;
-  double beta;
-  MatrixXd X_s_new;
-  MatrixXd X_s;
-  MatrixXd K;
-  MatrixXd X_g;
-  void fromJson(const Value& v);
-  void hatch(TrajOptProb& prob);
-  DEFINE_CREATE(OldTpsCostConstraintInfo)
-
-  private:
-    void fromJsonMatrix(MatrixXd& data, const Value& v);
-};
-
 struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
   MatrixXd H;
   MatrixXd f;
