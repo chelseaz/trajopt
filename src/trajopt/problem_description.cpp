@@ -639,11 +639,16 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(params.isMember("f"));
   Json::fromJson(params["f"], f);
 
-  FAIL_IF_FALSE(params.isMember("A"));
-  Json::fromJson(params["A"], A);
-
   FAIL_IF_FALSE(params.isMember("x_na"));
   Json::fromJson(params["x_na"], x_na);
+
+  FAIL_IF_FALSE(params.isMember("N"));
+  Json::fromJson(params["N"], N);
+
+  childFromJson(params, alpha, "alpha", 1.0);
+
+  const char* all_fields[] = {"H", "f", "x_na", "N", "alpha"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
 void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
@@ -656,12 +661,12 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   assert(H.cols() == n+dim+1);
   assert(f.rows() == n+dim+1);
   assert(f.cols() == dim);
-  assert(A.cols() == n+dim+1);
-  int n_cnts = A.rows();
+  assert(N.rows() == n+dim+1);
+  assert(N.cols() == n);
   assert(x_na.rows() == n);
   assert(x_na.cols() == dim);
 
-  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, A, x_na));
+  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, x_na, N, alpha));
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 
@@ -674,8 +679,9 @@ void TpsPoseCostInfo::fromJson(const Value& v) {
 
   FAIL_IF_FALSE(params.isMember("x_na"));
   Json::fromJson(params["x_na"], x_na);
-  FAIL_IF_FALSE(params.isMember("A"));
-  Json::fromJson(params["A"], A);
+
+  FAIL_IF_FALSE(params.isMember("N"));
+  Json::fromJson(params["N"], N);
 
   childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
   childFromJson(params, xyz,"xyz");
@@ -690,7 +696,7 @@ void TpsPoseCostInfo::fromJson(const Value& v) {
     PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
   }
 
-  const char* all_fields[] = {"x_na", "A", "timestep", "xyz", "wxyz", "pos_coeffs", "rot_coeffs", "link"};
+  const char* all_fields[] = {"x_na", "N", "timestep", "xyz", "wxyz", "pos_coeffs", "rot_coeffs", "link"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
@@ -698,7 +704,7 @@ void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
   VarArray traj_vars = prob.GetVars();
   VarArray tps_vars = prob.GetExtVars();
   VarVector dof_tps_vars = concat(traj_vars.row(timestep), tps_vars.flatten());
-  VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, A, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+  VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, N, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
 
   prob.GetPlotter()->Add(PlotterPtr(new TpsCartPoseErrorPlotter(f, dof_tps_vars)));

@@ -285,8 +285,9 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
 struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
   MatrixXd H;
   MatrixXd f;
-  MatrixXd A;
   MatrixXd x_na;
+  MatrixXd N;
+  double alpha;
 
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
@@ -295,7 +296,7 @@ struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesCo
 
 struct TpsPoseCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
   MatrixXd x_na;
-  MatrixXd A;
+  MatrixXd N;
   int timestep;
   Vector3d xyz;
   Vector4d wxyz;

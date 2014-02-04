@@ -39,16 +39,16 @@ class TRAJOPT_API TpsCost : public Cost {
    * s.t. Ax = 0
    */
 public:
-  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A, const MatrixXd& x_na);
+  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, double alpha);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
 //private: // TODO should be private
   VarArray tps_vars_;
   MatrixXd H_;
   MatrixXd f_;
-  MatrixXd A_;
   MatrixXd x_na_;
   MatrixXd N_;
+  double alpha_;
   MatrixXd NHN_;
   MatrixXd fN_;
   QuadExpr expr_;
@@ -69,7 +69,7 @@ struct TpsCartPoseErrCalculator : public VectorOfVector {
   int n_dof_;
   int n_;
   int d_;
-  TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
+  TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
   VectorXd operator()(const VectorXd& dof_theta_vals) const;
   VectorXd extractDofVals(const VectorXd& dof_theta_vals) const;
   MatrixXd extractThetaVals(const VectorXd& dof_theta_vals) const;

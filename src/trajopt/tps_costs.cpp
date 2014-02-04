@@ -260,8 +260,8 @@ vector<Matrix3d> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
 }
 
 
-TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A, const MatrixXd& x_na) :
-    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), A_(A), x_na_(x_na) {
+TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, double alpha) :
+    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), x_na_(x_na), N_(N), alpha_(alpha) {
   /**
    * solve equality-constrained qp
    * min tr(x'Hx) + sum(f'x)
@@ -278,14 +278,8 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
   assert(H.cols() == n+dim+1);
   assert(f.rows() == n+dim+1);
   assert(f.cols() == dim);
-  assert(A.cols() == n+dim+1);
-  int n_cnts = A.rows();
-
-  JacobiSVD<MatrixXd> svd(A, ComputeFullV);
-  VectorXd singular_values = svd.singularValues();
-  MatrixXd V = svd.matrixV();
-  int nullity = n;
-  N_ = V.block(0, V.cols()-nullity, V.rows(), nullity);
+  assert(N.rows() == n+dim+1);
+  assert(N.cols() == n);
 
   NHN_ = N_.transpose()*H*N_;
 
@@ -323,11 +317,12 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
 
   expr_ = exprTrzNHNz;
   exprInc(expr_, exprSumfNz);
+  exprScale(expr_, alpha);
 }
 
 double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
-  double ret = (z.transpose() * NHN_ * z).trace() + (fN_ * z).sum();
+  double ret = alpha_ * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).sum());
 //  cout << "value check " << ret << " " << expr_.value(xvec) << endl;
   return ret;
 }
@@ -346,6 +341,9 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   //TODO put grid drawing in rave_utils by passing a boost function pointer f.transform_points
   Vector3d mins = m_tps_cost->x_na_.colwise().minCoeff();
   Vector3d maxs = m_tps_cost->x_na_.colwise().maxCoeff();
+  Vector3d means = 0.5*(maxs+mins);
+  mins = means - 2*(maxs-means);
+  maxs = means + 2*(maxs-means);
   float xres = 0.1;
   float yres = 0.1;
   float zres = 0.04;
@@ -355,14 +353,17 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   while (xcoarse[xcoarse.size()-1] < maxs(0)) {
     xcoarse.push_back(xcoarse[xcoarse.size()-1] + xres);
   }
+  maxs(0) = xcoarse.back();
   vector<float> ycoarse(1,mins(1));
   while (ycoarse[ycoarse.size()-1] < maxs(1)) {
     ycoarse.push_back(ycoarse[ycoarse.size()-1] + yres);
   }
+  maxs(1) = ycoarse.back();
   vector<float> zcoarse(1,mins(2));
   while (zcoarse[zcoarse.size()-1] < maxs(2)) {
      zcoarse.push_back(zcoarse[zcoarse.size()-1] + zres);
   }
+  maxs(2) = zcoarse.back();
 
   VectorXd xfine(nfine), yfine(nfine), zfine(nfine);
   for (int i = 0; i < nfine; i++) {
@@ -414,21 +415,16 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   }
 }
 
-TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
   x_na_(x_na),
+  N_(N),
   src_pose_(src_pose),
   manip_(manip),
   link_(link),
   n_dof_(manip->GetDOF()),
   n_(x_na.rows()),
   d_(x_na.cols())
-{
-  JacobiSVD<MatrixXd> svd(A, ComputeFullV);
-  VectorXd singular_values = svd.singularValues();
-  MatrixXd V = svd.matrixV();
-  int nullity = n_;
-  N_ = V.block(0, V.cols()-nullity, V.rows(), nullity); // N_ has dimension (n+d+1,n)
-}
+{}
 
 VectorXd TpsCartPoseErrCalculator::operator()(const VectorXd& dof_theta_vals) const {
   VectorXd dof_vals = extractDofVals(dof_theta_vals);
