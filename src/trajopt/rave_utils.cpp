@@ -84,5 +84,16 @@ void PlotAxes(EnvironmentBase& env, const OpenRAVE::Transform& T, float size, ve
   handles.push_back(env.drawarrow(T.trans, z, size/10, Vector(0,0,1,1)));
 }
 
+void PlotPointCloud(EnvironmentBase& env, const MatrixXd& x_na, float size, vector<GraphHandlePtr>& handles, const RaveVector<float>& color) {
+  int numPoints = x_na.rows();
+  assert(x_na.cols() == 3);
+  float ppoints[numPoints*3];
+  for (int i = 0; i < numPoints; i++) {
+    ppoints[3*i] = x_na(i,0);
+    ppoints[3*i+1] = x_na(i,1);
+    ppoints[3*i+2] = x_na(i,2);
+  }
+  handles.push_back(env.plot3(ppoints, numPoints, 3*sizeof(float)/sizeof(char), size, color));
+}
 
 }

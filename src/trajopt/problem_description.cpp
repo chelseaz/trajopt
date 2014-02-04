@@ -641,6 +641,9 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
 
   FAIL_IF_FALSE(params.isMember("A"));
   Json::fromJson(params["A"], A);
+
+  FAIL_IF_FALSE(params.isMember("x_na"));
+  Json::fromJson(params["x_na"], x_na);
 }
 
 void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
@@ -655,10 +658,14 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   assert(f.cols() == dim);
   assert(A.cols() == n+dim+1);
   int n_cnts = A.rows();
+  assert(x_na.rows() == n);
+  assert(x_na.cols() == dim);
 
-  TpsCost* tps_cost = new TpsCost(traj_vars, tps_vars, H, f, A);
+  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, A, x_na));
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
+
+  prob.GetPlotter()->Add(PlotterPtr(new TpsCostPlotter(tps_cost)));
 }
 
 void TpsPoseCostInfo::fromJson(const Value& v) {
@@ -693,6 +700,9 @@ void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
   VarVector dof_tps_vars = concat(traj_vars.row(timestep), tps_vars.flatten());
   VectorOfVectorPtr f(new TpsCartPoseErrCalculator(x_na, A, toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
+
+  prob.GetPlotter()->Add(PlotterPtr(new TpsCartPoseErrorPlotter(f, dof_tps_vars)));
+  prob.GetPlotter()->AddLink(link);
 }
 
 }

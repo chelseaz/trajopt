@@ -39,19 +39,25 @@ class TRAJOPT_API TpsCost : public Cost {
    * s.t. Ax = 0
    */
 public:
-  TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A);
+  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A, const MatrixXd& x_na);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
-private:
-  VarArray traj_vars_;
+//private: // TODO should be private
   VarArray tps_vars_;
   MatrixXd H_;
   MatrixXd f_;
   MatrixXd A_;
+  MatrixXd x_na_;
   MatrixXd N_;
   MatrixXd NHN_;
   MatrixXd fN_;
   QuadExpr expr_;
+};
+
+struct TpsCostPlotter : public Plotter {
+  boost::shared_ptr<TpsCost> m_tps_cost; //actually points to a TpsCost
+  TpsCostPlotter(boost::shared_ptr<TpsCost> tps_cost) : m_tps_cost(tps_cost) {}
+  void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 
 struct TpsCartPoseErrCalculator : public VectorOfVector {
@@ -65,6 +71,15 @@ struct TpsCartPoseErrCalculator : public VectorOfVector {
   int d_;
   TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
   VectorXd operator()(const VectorXd& dof_theta_vals) const;
+  VectorXd extractDofVals(const VectorXd& dof_theta_vals) const;
+  MatrixXd extractThetaVals(const VectorXd& dof_theta_vals) const;
+};
+
+struct TpsCartPoseErrorPlotter : public Plotter {
+  boost::shared_ptr<void> m_calc; //actually points to a TpsCartPoseErrCalculator
+  VarVector m_vars;
+  TpsCartPoseErrorPlotter(boost::shared_ptr<void> calc, const VarVector& vars) : m_calc(calc), m_vars(vars) {}
+  void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 
 }

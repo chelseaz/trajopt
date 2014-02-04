@@ -5,12 +5,14 @@
 #include "sco/expr_ops.hpp"
 #include "sco/modeling_utils.hpp"
 #include "trajopt/tps_costs.hpp"
+#include "trajopt/rave_utils.hpp"
 #include "utils/eigen_conversions.hpp"
-
+#include <boost/foreach.hpp>
 
 using namespace std;
 using namespace sco;
 using namespace Eigen;
+using namespace util;
 
 #define pM(a) std::cout << #a << ".shape = (" << ((a).rows()) << ", " << ((a).cols()) << ")" << std::endl
 
@@ -258,8 +260,8 @@ vector<Matrix3d> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
 }
 
 
-TpsCost::TpsCost(const VarArray& traj_vars, const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A) :
-    Cost("Tps"), traj_vars_(traj_vars), tps_vars_(tps_vars), H_(H), f_(f), A_(A) {
+TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& A, const MatrixXd& x_na) :
+    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), A_(A), x_na_(x_na) {
   /**
    * solve equality-constrained qp
    * min tr(x'Hx) + sum(f'x)
@@ -336,6 +338,82 @@ ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
   return out;
 }
 
+void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles) {
+  MatrixXd theta = m_tps_cost->N_ * getTraj(x, m_tps_cost->tps_vars_);
+
+  ThinPlateSpline f(theta, m_tps_cost->x_na_);
+
+  //TODO put grid drawing in rave_utils by passing a boost function pointer f.transform_points
+  Vector3d mins = m_tps_cost->x_na_.colwise().minCoeff();
+  Vector3d maxs = m_tps_cost->x_na_.colwise().maxCoeff();
+  float xres = 0.1;
+  float yres = 0.1;
+  float zres = 0.04;
+
+  int nfine = 30;
+  vector<float> xcoarse(1,mins(0));
+  while (xcoarse[xcoarse.size()-1] < maxs(0)) {
+    xcoarse.push_back(xcoarse[xcoarse.size()-1] + xres);
+  }
+  vector<float> ycoarse(1,mins(1));
+  while (ycoarse[ycoarse.size()-1] < maxs(1)) {
+    ycoarse.push_back(ycoarse[ycoarse.size()-1] + yres);
+  }
+  vector<float> zcoarse(1,mins(2));
+  while (zcoarse[zcoarse.size()-1] < maxs(2)) {
+     zcoarse.push_back(zcoarse[zcoarse.size()-1] + zres);
+  }
+
+  VectorXd xfine(nfine), yfine(nfine), zfine(nfine);
+  for (int i = 0; i < nfine; i++) {
+    xfine(i) = mins(0) + float(i) * (maxs(0)-mins(0))/float(nfine-1);
+    yfine(i) = mins(1) + float(i) * (maxs(1)-mins(1))/float(nfine-1);
+    zfine(i) = mins(2) + float(i) * (maxs(2)-mins(2))/float(nfine-1);
+  }
+
+  vector<MatrixXd> lines;
+  BOOST_FOREACH(float& x, xcoarse) {
+    BOOST_FOREACH(float& y, ycoarse) {
+      MatrixXd xyz(nfine, 3);
+      xyz.col(0) = x * VectorXd::Ones(nfine);
+      xyz.col(1) = y * VectorXd::Ones(nfine);
+      xyz.col(2) = zfine;
+      lines.push_back(f.transform_points(xyz));
+    }
+  }
+
+  BOOST_FOREACH(float& y, ycoarse) {
+    BOOST_FOREACH(float& z, zcoarse) {
+      MatrixXd xyz(nfine, 3);
+      xyz.col(0) = xfine;
+      xyz.col(1) = y * VectorXd::Ones(nfine);
+      xyz.col(2) = z * VectorXd::Ones(nfine);;
+      lines.push_back(f.transform_points(xyz));
+    }
+  }
+
+  BOOST_FOREACH(float& z, zcoarse) {
+    BOOST_FOREACH(float& x, xcoarse) {
+      MatrixXd xyz(nfine, 3);
+      xyz.col(0) = x * VectorXd::Ones(nfine);
+      xyz.col(1) = yfine;
+      xyz.col(2) = z * VectorXd::Ones(nfine);
+      lines.push_back(f.transform_points(xyz));
+    }
+  }
+
+  for (int l = 0; l < lines.size(); l++) {
+    int numPoints = lines[l].rows();
+    float ppoints[3*numPoints];
+    for (int i = 0; i < numPoints; i++) {
+      for (int j = 0; j < 3; j++) {
+        ppoints[3*i + j] = lines[l](i,j);
+      }
+    }
+    handles.push_back(env.drawlinestrip(ppoints, numPoints, 3*sizeof(float)/sizeof(char), 2, OR::Vector(0,0,1,1)));
+  }
+}
+
 TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& A, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
   x_na_(x_na),
   src_pose_(src_pose),
@@ -353,20 +431,46 @@ TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const M
 }
 
 VectorXd TpsCartPoseErrCalculator::operator()(const VectorXd& dof_theta_vals) const {
-  VectorXd dof_vals = dof_theta_vals.topRows(n_dof_);
-  VectorXd theta_vals = dof_theta_vals.bottomRows(dof_theta_vals.size() - n_dof_);
-  assert(dof_theta_vals.size() - n_dof_ == n_*d_);
-  MatrixXd theta = N_ * Map<const MatrixXd>(theta_vals.data(), n_, d_);
+  VectorXd dof_vals = extractDofVals(dof_theta_vals);
+  MatrixXd theta = extractThetaVals(dof_theta_vals);
 
   manip_->SetDOFValues(toDblVec(dof_vals));
-  OR::Transform targ_pose = link_->GetTransform();
+  OR::Transform cur_pose = link_->GetTransform();
 
   ThinPlateSpline f(theta, x_na_);
   OR::Transform warped_src_pose = f.transform_hmats(vector<OR::Transform>(1, src_pose_))[0];
 
-  OR::Transform pose_err = warped_src_pose.inverse() * targ_pose;
+  OR::Transform pose_err = warped_src_pose.inverse() * cur_pose;
   VectorXd err = concat(rotVec(pose_err.rot), toVector3d(pose_err.trans));
   return err;
+}
+
+VectorXd TpsCartPoseErrCalculator::extractDofVals(const VectorXd& dof_theta_vals) const {
+  return dof_theta_vals.topRows(n_dof_);
+}
+
+MatrixXd TpsCartPoseErrCalculator::extractThetaVals(const VectorXd& dof_theta_vals) const {
+  VectorXd theta_vals = dof_theta_vals.bottomRows(dof_theta_vals.size() - n_dof_);
+  assert(dof_theta_vals.size() - n_dof_ == n_*d_);
+  return N_ * Map<const MatrixXd>(theta_vals.data(), n_, d_);
+}
+
+void TpsCartPoseErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles) {
+  TpsCartPoseErrCalculator* calc = static_cast<TpsCartPoseErrCalculator*>(m_calc.get());
+  VectorXd dof_theta_vals = toVectorXd(getDblVec(x, m_vars));
+  VectorXd dof_vals = calc->extractDofVals(dof_theta_vals);
+  MatrixXd theta = calc->extractThetaVals(dof_theta_vals);
+  calc->manip_->SetDOFValues(toDblVec(dof_vals));
+  ThinPlateSpline f(theta, calc->x_na_);
+  OR::Transform target = f.transform_hmats(vector<OR::Transform>(1, calc->src_pose_))[0];
+  OR::Transform cur = calc->link_->GetTransform();
+  PlotAxes(env, cur, .05,  handles);
+  PlotAxes(env, target, .05,  handles);
+  handles.push_back(env.drawarrow(cur.trans, target.trans, .005, OR::Vector(1,0,1,1)));
+  MatrixXd x_na = calc->x_na_;
+  MatrixXd f_x_na = f.transform_points(x_na);
+  PlotPointCloud(env, x_na, 5, handles, OR::Vector(1,0,0,1));
+  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,0,1,1));
 }
 
 }
