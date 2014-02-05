@@ -284,6 +284,7 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   Configuration::SaverPtr saver = prob->GetRAD()->Save();
   BasicTrustRegionSQP opt(prob);
   opt.max_iter_ = 40;
+  opt.max_merit_coeff_increases_ = 10;
   opt.min_approx_improve_frac_ = .001;
   opt.improve_ratio_threshold_ = .2;
   opt.merit_error_coeff_ = 20;
@@ -645,7 +646,7 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(params.isMember("N"));
   Json::fromJson(params["N"], N);
 
-  childFromJson(params, alpha, "alpha", 1.0);
+  childFromJson(params, alpha, "alpha");
 
   const char* all_fields[] = {"H", "f", "x_na", "N", "alpha"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));

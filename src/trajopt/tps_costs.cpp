@@ -280,6 +280,8 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
   assert(f.cols() == dim);
   assert(N.rows() == n+dim+1);
   assert(N.cols() == n);
+  assert(x_na.rows() == n);
+  assert(x_na.cols() == dim);
 
   NHN_ = N_.transpose()*H*N_;
 
@@ -317,12 +319,12 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
 
   expr_ = exprTrzNHNz;
   exprInc(expr_, exprSumfNz);
-  exprScale(expr_, alpha);
+  exprScale(expr_, alpha/double(n));
 }
 
 double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
-  double ret = alpha_ * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).sum());
+  double ret = (alpha_/double(x_na_.rows())) * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).sum());
 //  cout << "value check " << ret << " " << expr_.value(xvec) << endl;
   return ret;
 }

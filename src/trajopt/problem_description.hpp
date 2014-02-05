@@ -252,7 +252,7 @@ Distrete-time penalty:
 Continuous-time penalty: same, except you consider swept-out shaps of robot links. Currently self-collisions are not included.
 
 */
-struct CollisionCostInfo : public TermInfo, public MakesCost {
+struct CollisionCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
   /// first_step and last_step are inclusive
   int first_step, last_step;
   /// coeffs.size() = num_timesteps
@@ -282,7 +282,7 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
   DEFINE_CREATE(JointConstraintInfo)
 };
 
-struct TpsCostConstraintInfo : public TermInfo, public MakesCost, public MakesConstraint {
+struct TpsCostConstraintInfo : public TermInfo, public MakesCost {
   MatrixXd H;
   MatrixXd f;
   MatrixXd x_na;
