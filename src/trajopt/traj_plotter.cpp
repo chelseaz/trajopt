@@ -8,8 +8,8 @@ using namespace std;
 
 namespace trajopt {
 
-TrajPlotter::TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars)
-  : m_env(env), m_config(config), m_trajvars(trajvars), m_decimation(1)
+TrajPlotter::TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars, const VarArray& extvars)
+  : m_env(env), m_config(config), m_trajvars(trajvars), m_extvars(extvars), m_decimation(1)
 {
 }
 

@@ -379,7 +379,7 @@ TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext
   VarVector extvarvec = createVariables(ext_names);
   m_ext_vars = VarArray(m_ext, n_ext, extvarvec.data());
 
-  m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars));
+  m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars, m_ext_vars));
 
 }
 

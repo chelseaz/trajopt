@@ -6,11 +6,12 @@ struct TRAJOPT_API TrajPlotter {
   OpenRAVE::EnvironmentBasePtr m_env;
   ConfigurationPtr m_config;
   VarArray m_trajvars;
+  VarArray m_extvars;
   vector<PlotterPtr> m_plotters;
   std::set<KinBody::LinkPtr> m_links; // links for which we'll plot the trajectory
   int m_decimation;
 
-  TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars);
+  TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars, const VarArray& extvars);
   void Add(const vector<CostPtr>& costs);
   void Add(const vector<ConstraintPtr>& constraints);
   void Add(const vector<PlotterPtr>& plotters);

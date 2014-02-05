@@ -105,7 +105,7 @@ TEST_F(PlanningTest, arm_around_table) {
 
 
   BasicTrustRegionSQP opt(prob);
-  TrajPlotter plotter(env, pci.rad, prob->GetVars());
+  TrajPlotter plotter(env, pci.rad, prob->GetVars(), prob->GetExtVars());
   if (plotting) {
     plotter.Add(prob->getCosts());
     if (plotting) opt.addCallback(boost::bind(&TrajPlotter::OptimizerCallback, boost::ref(plotter), _1, _2));

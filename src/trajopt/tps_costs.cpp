@@ -413,7 +413,7 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
         ppoints[3*i + j] = lines[l](i,j);
       }
     }
-    handles.push_back(env.drawlinestrip(ppoints, numPoints, 3*sizeof(float)/sizeof(char), 2, OR::Vector(0,0,1,1)));
+    handles.push_back(env.drawlinestrip(ppoints, numPoints, 3*sizeof(float)/sizeof(char), 2, OR::Vector(0,1,0,1)));
   }
 }
 
