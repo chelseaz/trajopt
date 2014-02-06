@@ -39,7 +39,7 @@ class TRAJOPT_API TpsCost : public Cost {
    * s.t. Ax = 0
    */
 public:
-  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, double alpha);
+  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, const VectorXd& wt_n, const VectorXd& rot_coef, double alpha, double lambda);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
 //private: // TODO should be private
@@ -48,7 +48,11 @@ public:
   MatrixXd f_;
   MatrixXd x_na_;
   MatrixXd N_;
+  MatrixXd y_ng_;
+  VectorXd wt_n_;
+  VectorXd rot_coef_;
   double alpha_;
+  double lambda_;
   MatrixXd NHN_;
   MatrixXd fN_;
   QuadExpr expr_;
@@ -58,6 +62,16 @@ struct TpsCostPlotter : public Plotter {
   boost::shared_ptr<TpsCost> m_tps_cost; //actually points to a TpsCost
   TpsCostPlotter(boost::shared_ptr<TpsCost> tps_cost) : m_tps_cost(tps_cost) {}
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
+};
+
+struct TpsCorrErrCalculator : public VectorOfVector {
+public:
+  TpsCorrErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, double alpha);
+  VectorXd operator()(const VectorXd& theta_vals) const;
+  MatrixXd x_na_;
+  MatrixXd N_;
+  MatrixXd y_ng_;
+  double alpha_;
 };
 
 struct TpsCartPoseErrCalculator : public VectorOfVector {

@@ -125,8 +125,9 @@ void fromJson(const Json::Value& v, MatrixXd& x) {
   }
   x.resize(v.size(), v[0].size());
   for (int i=0; i < v.size(); ++i) {
+    assert(v[i].size() == v[0].size());
     DblVec row;
-    fromJsonArray(v[i], row, v[0].size());
+    fromJsonArray(v[i], row, v[i].size());
     x.row(i) = toVectorXd(row);
   }
 }
@@ -646,9 +647,19 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(params.isMember("N"));
   Json::fromJson(params["N"], N);
 
-  childFromJson(params, alpha, "alpha");
+  FAIL_IF_FALSE(params.isMember("y_ng"));
+  Json::fromJson(params["y_ng"], y_ng);
 
-  const char* all_fields[] = {"H", "f", "x_na", "N", "alpha"};
+  FAIL_IF_FALSE(params.isMember("wt_n"));
+  Json::fromJson(params["wt_n"], wt_n);
+
+  FAIL_IF_FALSE(params.isMember("rot_coef"));
+  Json::fromJson(params["rot_coef"], rot_coef);
+
+  childFromJson(params, alpha, "alpha");
+  childFromJson(params, lambda, "lambda");
+
+  const char* all_fields[] = {"H", "f", "x_na", "N", "y_ng", "wt_n", "rot_coef", "alpha", "lambda"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
@@ -666,8 +677,9 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   assert(N.cols() == n);
   assert(x_na.rows() == n);
   assert(x_na.cols() == dim);
+  assert(wt_n.size() == n);
 
-  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, x_na, N, alpha));
+  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, x_na, N, y_ng, wt_n, rot_coef, alpha, lambda));
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 

@@ -260,8 +260,8 @@ vector<Matrix3d> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
 }
 
 
-TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, double alpha) :
-    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), x_na_(x_na), N_(N), alpha_(alpha) {
+TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, const VectorXd& wt_n, const VectorXd& rot_coef, double alpha, double lambda) :
+    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), x_na_(x_na), N_(N), y_ng_(y_ng), wt_n_(wt_n), rot_coef_(rot_coef), alpha_(alpha), lambda_(lambda) {
   /**
    * solve equality-constrained qp
    * min tr(x'Hx) + sum(f'x)
@@ -278,12 +278,15 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
   assert(H.cols() == n+dim+1);
   assert(f.rows() == n+dim+1);
   assert(f.cols() == dim);
-  assert(N.rows() == n+dim+1);
-  assert(N.cols() == n);
   assert(x_na.rows() == n);
   assert(x_na.cols() == dim);
+  assert(N.rows() == n+dim+1);
+  assert(N.cols() == n);
+  assert(y_ng.rows() == n);
+  assert(y_ng.cols() == dim);
+  assert(wt_n.size() == n);
 
-  NHN_ = N_.transpose()*H*N_;
+  NHN_ = N_.transpose()*H_*N_;
 
   QuadExpr exprTrzNHNz;
   exprTrzNHNz.coeffs.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
@@ -303,30 +306,42 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f,
     }
   }
 
-  fN_ = f.transpose() * N_;
+  fN_ = f_.transpose() * N_;
 
-  AffExpr exprSumfNz;
-  exprSumfNz.coeffs.reserve(dim * fN_.rows()*fN_.cols());
-  exprSumfNz.vars.reserve(dim * fN_.rows()*fN_.cols());
-  for (int d = 0; d < dim; d++) {
-    for (int i = 0; i < fN_.rows(); i++) {
-      for (int j = 0; j < fN_.cols(); j++) {
-        exprSumfNz.coeffs.push_back(fN_(i,j));
-        exprSumfNz.vars.push_back(tps_vars_(j,d));
-      }
+  AffExpr exprTrfNz;
+  exprTrfNz.coeffs.reserve(fN_.rows()*fN_.cols());
+  exprTrfNz.vars.reserve(fN_.rows()*fN_.cols());
+  for (int i = 0; i < fN_.rows(); i++) {
+    for (int j = 0; j < fN_.cols(); j++) {
+      exprTrfNz.coeffs.push_back(fN_(i,j));
+      exprTrfNz.vars.push_back(tps_vars_(j,i));
     }
   }
 
   expr_ = exprTrzNHNz;
-  exprInc(expr_, exprSumfNz);
+  exprInc(expr_, exprTrfNz);
+  VectorXd w_sqrt = wt_n_.array().sqrt();
+  exprInc(expr_, y_ng_.cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm());
   exprScale(expr_, alpha/double(n));
 }
 
 double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
-  double ret = (alpha_/double(x_na_.rows())) * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).sum());
-//  cout << "value check " << ret << " " << expr_.value(xvec) << endl;
-  return ret;
+  VectorXd w_sqrt = wt_n_.array().sqrt();
+  double obj_value = (alpha_/double(x_na_.rows())) * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).trace() + y_ng_.cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm());
+
+//  MatrixXd theta = N_ * z;
+//  ThinPlateSpline f(theta, x_na_);
+//  MatrixXd f_x_na = f.transform_points(x_na_);
+//  MatrixXd K = tps_kernel_matrix2(f.x_na_, f.x_na_);
+//
+//  double obj_explicit = (alpha_/double(x_na_.rows())) * ((f_x_na - y_ng_).cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm() + lambda_*(f.w_ng_.transpose()*K*f.w_ng_).trace()
+//      + (f.lin_ag_.transpose()*rot_coef_.asDiagonal()*f.lin_ag_).trace() - (rot_coef_.asDiagonal()*f.lin_ag_.transpose()).trace());
+//  double obj_expr = expr_.value(xvec);
+//  cout << "value check " << obj_value << " " << obj_explicit << " " << obj_expr << endl;
+//  cout << "error term only " << (alpha_/double(x_na_.rows())) * ((f_x_na - y_ng_).cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm()) << endl;
+
+  return obj_value;
 }
 
 ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
@@ -339,6 +354,10 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   MatrixXd theta = m_tps_cost->N_ * getTraj(x, m_tps_cost->tps_vars_);
 
   ThinPlateSpline f(theta, m_tps_cost->x_na_);
+  MatrixXd f_x_na = f.transform_points(m_tps_cost->x_na_);
+  PlotPointCloud(env, m_tps_cost->x_na_, 5, handles, OR::Vector(1,0,0,1));
+  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,1,0,1));
+  PlotPointCloud(env, m_tps_cost->y_ng_, 5, handles, OR::Vector(0,0,1,1));
 
   //TODO put grid drawing in rave_utils by passing a boost function pointer f.transform_points
   Vector3d mins = m_tps_cost->x_na_.colwise().minCoeff();
@@ -413,8 +432,26 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
         ppoints[3*i + j] = lines[l](i,j);
       }
     }
-    handles.push_back(env.drawlinestrip(ppoints, numPoints, 3*sizeof(float)/sizeof(char), 2, OR::Vector(0,1,0,1)));
+    handles.push_back(env.drawlinestrip(ppoints, numPoints, 3*sizeof(float)/sizeof(char), 2, OR::Vector(0,1,1,1)));
   }
+}
+
+TpsCorrErrCalculator::TpsCorrErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, double alpha) :
+  x_na_(x_na),
+  N_(N),
+  y_ng_(y_ng),
+  alpha_(alpha)
+{}
+
+VectorXd TpsCorrErrCalculator::operator()(const VectorXd& theta_vals) const {
+  int n = x_na_.rows();
+  int d = x_na_.cols();
+  MatrixXd theta = N_ * Map<const MatrixXd>(theta_vals.data(), n, d);
+  ThinPlateSpline f(theta, x_na_);
+  MatrixXd f_x_na = f.transform_points(x_na_);
+  VectorXd err = (alpha_/double(x_na_.rows())) * (f_x_na - y_ng_).norm() * VectorXd::Ones(1); // TODO include regularizer
+  cout << "err " << err << endl;
+  return err;
 }
 
 TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
@@ -468,7 +505,7 @@ void TpsCartPoseErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, st
   MatrixXd x_na = calc->x_na_;
   MatrixXd f_x_na = f.transform_points(x_na);
   PlotPointCloud(env, x_na, 5, handles, OR::Vector(1,0,0,1));
-  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,0,1,1));
+  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,1,0,1));
 }
 
 }
