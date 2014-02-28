@@ -21,6 +21,10 @@ public:
   void RemoveKinBody(OpenRAVE::KinBodyPtr pbody);
   void Draw();
   void Idle(); // should be called ToggleIdle
+  osg::Matrixd GetCameraManipulatorMatrix();
+  void SetCameraManipulatorMatrix(osg::Matrixd m);
+  void GetWindowProp(int& x, int& y, int& width, int& height);
+  void SetWindowProp(int x, int y, int width, int height);
   void UpdateSceneData();
   const std::string& GetName() const {return m_name;}
   void SetBkgndColor(const RaveVectorf &) {printf("warning: SetBkgndColor not implemented\n");}

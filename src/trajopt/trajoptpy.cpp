@@ -305,7 +305,34 @@ public:
     assert(!!m_viewer);
     m_viewer->Idle();
   }
-PyGraphHandle DrawText(std::string text, float x, float y, float fontsize, py::object pycolor) {
+  py::object GetCameraManipulatorMatrix() {
+    assert(!!m_viewer);
+    osg::Matrixd m = m_viewer->GetCameraManipulatorMatrix();
+    py::object np_m = np_mod.attr("array")(toNdarray2<double>(m.ptr(), 4, 4), "float64");
+    return np_m;
+  }
+  void SetCameraManipulatorMatrix(py::object np_m) {
+    assert(!!m_viewer);
+    py::object shape = np_m.attr("shape");
+    assert(py::extract<int>(shape[0]) == 4);
+    assert(py::extract<int>(shape[1]) == 4);
+    osg::Matrixd m(getPointer<double>(np_m));
+    m_viewer->SetCameraManipulatorMatrix(m);
+  }
+  py::object GetWindowProp() {
+    assert(!!m_viewer);
+    int x, y, width, height;
+    m_viewer->GetWindowProp(x, y, width, height);
+    std::cout << "x " << x << " y " << y << std::endl;
+    int prop[] = {x, y, width, height};
+    py::object np_prop = np_mod.attr("array")(toNdarray1<int>(prop, 4), "int");
+    return np_prop;
+  }
+  void SetWindowProp(int x, int y, int width, int height) {
+    assert(!!m_viewer);
+    m_viewer->SetWindowProp(x, y, width, height);
+  }
+  PyGraphHandle DrawText(std::string text, float x, float y, float fontsize, py::object pycolor) {
     OpenRAVE::Vector color = OpenRAVE::Vector(py::extract<float>(pycolor[0]), py::extract<float>(pycolor[1]), py::extract<float>(pycolor[2]), py::extract<float>(pycolor[3]));
     return PyGraphHandle(m_viewer->drawtext(text, x, y, fontsize, color));
   }
@@ -380,6 +407,10 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("SetTransparency", &PyOSGViewer::SetTransparency)
      .def("SetAllTransparency", &PyOSGViewer::SetAllTransparency)
      .def("Idle", &PyOSGViewer::Idle)
+     .def("GetCameraManipulatorMatrix", &PyOSGViewer::GetCameraManipulatorMatrix)
+     .def("SetCameraManipulatorMatrix", &PyOSGViewer::SetCameraManipulatorMatrix)
+     .def("GetWindowProp", &PyOSGViewer::GetWindowProp)
+     .def("SetWindowProp", &PyOSGViewer::SetWindowProp)
      .def("DrawText", &PyOSGViewer::DrawText)
      .def("RemoveKinBody", &PyOSGViewer::RemoveKinBody)
     ;
