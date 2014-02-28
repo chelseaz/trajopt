@@ -497,6 +497,31 @@ void OSGViewer::Draw() {
   m_viewer.frame();
 }
 
+osg::Matrixd OSGViewer::GetCameraManipulatorMatrix() {
+  osg::Matrixd m = m_viewer.getCameraManipulator()->getMatrix();
+  return m;
+}
+
+void OSGViewer::SetCameraManipulatorMatrix(osg::Matrixd m) {
+  m_viewer.getCameraManipulator()->setByMatrix(m);
+  m_viewer.frame();
+}
+
+void OSGViewer::GetWindowProp(int& x, int& y, int& width, int& height) {
+  std::vector<osgViewer::GraphicsWindow*> windows;
+  m_viewer.getWindows(windows);
+  assert(windows.size() == 1);
+  windows[0]->getWindowRectangle(x, y, width, height);
+}
+
+void OSGViewer::SetWindowProp(int x, int y, int width, int height) {
+  std::vector<osgViewer::GraphicsWindow*> windows;
+  m_viewer.getWindows(windows);
+  assert(windows.size() == 1);
+  windows[0]->setWindowRectangle(x, y, width, height);
+  m_viewer.frame();
+}
+
 void OSGViewer::RemoveKinBody(OpenRAVE::KinBodyPtr body) {
   KinBodyGroup* node = GetOsgGroup(*body);
   if (node) {
