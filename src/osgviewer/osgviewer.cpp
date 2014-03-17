@@ -522,6 +522,14 @@ void OSGViewer::SetWindowProp(int x, int y, int width, int height) {
   m_viewer.frame();
 }
 
+void OSGViewer::SaveScreenshot(string filename) {
+  osg::ref_ptr<SaveImageOp> capture_op = new SaveImageOp(filename);
+  osg::ref_ptr<osgViewer::ScreenCaptureHandler> captureHandler = new osgViewer::ScreenCaptureHandler(capture_op);
+  captureHandler->captureNextFrame(m_viewer);
+  captureHandler->setFramesToCapture(1);
+  m_viewer.frame();
+}
+
 void OSGViewer::RemoveKinBody(OpenRAVE::KinBodyPtr body) {
   KinBodyGroup* node = GetOsgGroup(*body);
   if (node) {
