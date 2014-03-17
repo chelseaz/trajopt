@@ -203,6 +203,8 @@ public:
   Collision m_c;
   PyCollision(const Collision& c) : m_c(c) {}
   float GetDistance() {return m_c.distance;}
+  string GetLinkAName() {return m_c.linkA->GetName();}
+  string GetLinkBName() {return m_c.linkB->GetName();}
 };
 
 py::list toPyList(const vector<Collision>& collisions) {
@@ -322,6 +324,10 @@ public:
     assert(!!m_viewer);
     m_viewer->SetWindowProp(x, y, width, height);
   }
+  void SaveScreenshot(string filename) {
+    assert(!!m_viewer);
+    m_viewer->SaveScreenshot(filename);
+  }
   PyGraphHandle DrawText(std::string text, float x, float y, float fontsize, py::object pycolor) {
     OpenRAVE::Vector color = OpenRAVE::Vector(py::extract<float>(pycolor[0]), py::extract<float>(pycolor[1]), py::extract<float>(pycolor[2]), py::extract<float>(pycolor[3]));
     return PyGraphHandle(m_viewer->drawtext(text, x, y, fontsize, color));
@@ -383,6 +389,8 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   py::def("GetCollisionChecker", &PyGetCollisionChecker);
   py::class_<PyCollision>("Collision", py::no_init)
      .def("GetDistance", &PyCollision::GetDistance)
+     .def("GetLinkAName", &PyCollision::GetLinkAName)
+     .def("GetLinkBName", &PyCollision::GetLinkBName)
     ;
   py::class_< PyGraphHandle >("GraphHandle", py::no_init)
      .def("SetTransparency", &PyGraphHandle::SetTransparency1)
@@ -400,6 +408,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("SetCameraManipulatorMatrix", &PyOSGViewer::SetCameraManipulatorMatrix)
      .def("GetWindowProp", &PyOSGViewer::GetWindowProp)
      .def("SetWindowProp", &PyOSGViewer::SetWindowProp)
+     .def("SaveScreenshot", &PyOSGViewer::SaveScreenshot)
      .def("DrawText", &PyOSGViewer::DrawText)
      .def("RemoveKinBody", &PyOSGViewer::RemoveKinBody)
     ;

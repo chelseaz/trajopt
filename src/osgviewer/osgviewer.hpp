@@ -4,6 +4,8 @@
 #include <osgViewer/Viewer>
 #include <boost/function.hpp>
 #include <osgGA/TrackballManipulator>
+#include <osgViewer/ViewerEventHandlers>
+#include <osgDB/WriteFile>
 #include "macros.h"
 typedef OpenRAVE::RaveVector<float> RaveVectorf;
 
@@ -25,6 +27,7 @@ public:
   void SetCameraManipulatorMatrix(osg::Matrixd m);
   void GetWindowProp(int& x, int& y, int& width, int& height);
   void SetWindowProp(int x, int y, int width, int height);
+  void SaveScreenshot(std::string filename);
   void UpdateSceneData();
   const std::string& GetName() const {return m_name;}
   void SetBkgndColor(const RaveVectorf &) {printf("warning: SetBkgndColor not implemented\n");}
@@ -77,6 +80,16 @@ public:
   bool m_idling, m_request_stop_idling;
   std::string m_name;
 
+  private:
+  struct SaveImageOp: public osgViewer::ScreenCaptureHandler::CaptureOperation {
+    std::string m_filename;
+    SaveImageOp(std::string filename) : osgViewer::ScreenCaptureHandler::CaptureOperation() {
+      m_filename = filename;
+    }
+    void operator()(const osg::Image& image, const unsigned int context_id) {
+      osgDB::writeImageFile(image, m_filename);
+    }
+  };
 
 };
 typedef boost::shared_ptr<OSGViewer> OSGViewerPtr;
