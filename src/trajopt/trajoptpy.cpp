@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "sco/modeling_utils.hpp"
 #include "numpy_utils.hpp"
+#include "trajopt/hacd_interface.hpp"
 using namespace trajopt;
 using namespace Eigen;
 using namespace OpenRAVE;
@@ -357,6 +358,52 @@ PyOSGViewer PyGetViewer(py::object py_env) {
   return PyOSGViewer(viewer);
 }
 
+void ExtractTriMesh(py::object py_mesh, OpenRAVE::TriMesh& mesh) {
+  py::object vertices_arr = py_mesh.attr("vertices");
+  int vertices_size = py::extract<int>(vertices_arr.attr("size"));
+  double* vertices = getPointer<double>(vertices_arr);
+  py::object indices_arr = py_mesh.attr("indices");
+  int indices_size = py::extract<int>(indices_arr.attr("size"));
+  int* indices = getPointer<int>(indices_arr);
+  mesh.vertices.resize(vertices_size/3);
+  for (int i=0; i < mesh.vertices.size(); ++i) {
+    mesh.vertices[i].x = vertices[3*i];
+    mesh.vertices[i].y = vertices[3*i+1];
+    mesh.vertices[i].z = vertices[3*i+2];
+  }
+  mesh.indices.resize(indices_size);
+  for (int i=0; i < mesh.indices.size(); ++i) {
+    mesh.indices[i] = indices[i];
+  }
+}
+py::object toPyTriMesh(const OpenRAVE::TriMesh& mesh) {
+  double vertices[mesh.vertices.size()*3];
+  for (int i=0; i < mesh.vertices.size(); ++i) {
+    vertices[3*i] = mesh.vertices[i].x;
+    vertices[3*i+1] = mesh.vertices[i].y;
+    vertices[3*i+2] = mesh.vertices[i].z;
+  }
+  int indices[mesh.indices.size()];
+  for (int i=0; i < mesh.indices.size(); ++i) {
+    indices[i] = mesh.indices[i];
+  }
+  py::object vertices_arr = toNdarray2(vertices, mesh.vertices.size(), 3);
+  py::object indices_arr = toNdarray2(indices, mesh.indices.size()/3, 3);
+  py::object openravepy_int = py::import("openravepy.openravepy_int");
+  py::object py_mesh = openravepy_int.attr("TriMesh")(vertices_arr, indices_arr);
+  return py_mesh;
+}
+py::object PyConvexDecompHACD(py::object py_mesh, float concavity) {
+  OpenRAVE::TriMesh mesh;
+  ExtractTriMesh(py_mesh, mesh);
+  vector<OpenRAVE::TriMesh> convexmeshes = ConvexDecompHACD(mesh, concavity);
+  py::list out;
+  BOOST_FOREACH(const OpenRAVE::TriMesh& convexmesh, convexmeshes) {
+    out.append(toPyTriMesh(convexmesh));
+  }
+  return out;
+}
+
 
 BOOST_PYTHON_MODULE(ctrajoptpy) {
 
@@ -424,5 +471,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("RemoveKinBody", &PyOSGViewer::RemoveKinBody)
     ;
   py::def("GetViewer", &PyGetViewer, "Get OSG viewer for environment or create a new one");
+
+  py::def("ConvexDecompHACD", &PyConvexDecompHACD, (py::arg("concavityParam") = 100),  "input: mesh. output: list of meshes. concavityParam: see http://kmamou.blogspot.com/2011/10/hacd-hierarchical-approximate-convex.html");
 
 }

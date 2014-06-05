@@ -5,6 +5,7 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
   ${OpenRAVE_INCLUDE_DIRS}
   ${JSON_INCLUDE_DIRS}
+  ${HACD_INCLUDE_DIRS}
 )
 
 if (NOT APPLE)
@@ -26,6 +27,8 @@ add_library(trajopt
 	collision_checker.cpp
 	plot_callback.cpp
 	bullet_unity.cpp
+	hacd_unity.cpp
+	hacd_interface.cpp
 )
 target_link_libraries(trajopt ${OpenRAVE_BOTH_LIBRARIES} ${Boost_SYSTEM_LIBRARY} sco utils json osgviewer)
 

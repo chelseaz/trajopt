@@ -11,6 +11,8 @@
 #include <utils/stl_to_string.hpp>
 #include "utils/logging.hpp"
 #include "openrave_userdata_utils.hpp"
+#include "trajopt/hacd_interface.hpp"
+
 using namespace util;
 using namespace std;
 using namespace trajopt;
@@ -130,8 +132,7 @@ void GetAverageSupport(const btConvexShape* shape, const btVector3& localNormal,
   }
 }
 
-
-btCollisionShape* createShapePrimitive(OR::KinBody::Link::GeometryPtr geom, bool useTrimesh, CollisionObjectWrapper* cow) {
+btCollisionShape* createShapePrimitive(OR::KinBody::Link::GeometryPtr geom, bool useTrimesh, bool useConvexDecomp, CollisionObjectWrapper* cow) {
 
   btCollisionShape* subshape=0;
 
@@ -160,48 +161,67 @@ btCollisionShape* createShapePrimitive(OR::KinBody::Link::GeometryPtr geom, bool
   case OpenRAVE::GT_TriMesh: {
     const OpenRAVE::TriMesh &mesh = geom->GetCollisionMesh();
     assert(mesh.indices.size() >= 3);
-    boost::shared_ptr<btTriangleMesh> ptrimesh(new btTriangleMesh());
 
-    for (size_t i = 0; i < mesh.indices.size(); i += 3) {
-      ptrimesh->addTriangle(toBt(mesh.vertices[mesh.indices[i]]), toBt(mesh.vertices[mesh.indices[i + 1]]),
-              toBt(mesh.vertices[mesh.indices[i + 2]]));
+    if (useConvexDecomp) { // CONVEX DECOMPOSITION
+      OpenRAVE::TriMesh mesh = geom->GetCollisionMesh();
+
+      btCompoundShape* compoundShape = new btCompoundShape(/*dynamicAABBtree=*/false);
+      subshape = compoundShape;
+
+      vector<OpenRAVE::TriMesh> childMeshes = ConvexDecompHACD(mesh, 100);
+      btTransform identityTransform;
+      identityTransform.setIdentity();
+      BOOST_FOREACH(const OpenRAVE::TriMesh& childMesh, childMeshes) {
+        geom->SetCollisionMesh(childMesh); // temporarily change the geom's TriMesh just to create the shape primitive
+        btCollisionShape* childShape = createShapePrimitive(geom, useTrimesh, false, cow);
+        if (childShape != NULL) {
+          compoundShape->addChildShape(identityTransform, childShape);
+        }
+      }
+      geom->SetCollisionMesh(mesh); // restore the geom's original TriMesh
+    } else {
+      boost::shared_ptr<btTriangleMesh> ptrimesh(new btTriangleMesh());
+
+      for (size_t i = 0; i < mesh.indices.size(); i += 3) {
+        ptrimesh->addTriangle(toBt(mesh.vertices[mesh.indices[i]]), toBt(mesh.vertices[mesh.indices[i + 1]]),
+            toBt(mesh.vertices[mesh.indices[i + 2]]));
+      }
+
+      if (useTrimesh) {
+        subshape = new btBvhTriangleMeshShape(ptrimesh.get(), true);
+        cow->manage(ptrimesh);
+      }
+      else { // CONVEX HULL
+        btConvexTriangleMeshShape convexTrimesh(ptrimesh.get());
+        convexTrimesh.setMargin(MARGIN); // margin: hull padding
+        //Create a hull shape to approximate Trimesh
+
+        bool useShapeHull;
+
+        btShapeHull shapeHull(&convexTrimesh);
+        if (mesh.vertices.size() >= 50) {
+          bool success = shapeHull.buildHull(-666); // note: margin argument not used
+          if (!success) LOG_WARN("shapehull convex hull failed! falling back to original vertices");
+            useShapeHull = success;
+        }
+        else {
+          useShapeHull = false;
+        }
+
+        btConvexHullShape *convexShape = new btConvexHullShape();
+        subshape = convexShape;
+        if (useShapeHull) {
+          for (int i = 0; i < shapeHull.numVertices(); ++i)
+            convexShape->addPoint(shapeHull.getVertexPointer()[i]);
+          break;
+        }
+        else {
+          for (int i = 0; i < mesh.vertices.size(); ++i)
+            convexShape->addPoint(toBt(mesh.vertices[i]));
+          break;
+        }
+      }
     }
-
-    if (useTrimesh) {
-      subshape = new btBvhTriangleMeshShape(ptrimesh.get(), true);
-      cow->manage(ptrimesh);
-    }
-    else { // CONVEX HULL
-      btConvexTriangleMeshShape convexTrimesh(ptrimesh.get());
-      convexTrimesh.setMargin(MARGIN); // margin: hull padding
-      //Create a hull shape to approximate Trimesh
-
-      bool useShapeHull;
-
-      btShapeHull shapeHull(&convexTrimesh);
-      if (mesh.vertices.size() >= 50) {
-        bool success = shapeHull.buildHull(-666); // note: margin argument not used
-        if (!success) LOG_WARN("shapehull convex hull failed! falling back to original vertices");
-        useShapeHull = success;
-      }
-      else {
-        useShapeHull = false;
-      }
-
-      btConvexHullShape *convexShape = new btConvexHullShape();
-      subshape = convexShape;
-      if (useShapeHull) {
-        for (int i = 0; i < shapeHull.numVertices(); ++i)
-          convexShape->addPoint(shapeHull.getVertexPointer()[i]);
-        break;
-      }
-      else {
-        for (int i = 0; i < mesh.vertices.size(); ++i)
-          convexShape->addPoint(toBt(mesh.vertices[i]));
-        break;
-      }
-      
-    }     
   }
   default:
     assert(0 && "unrecognized collision shape type");
@@ -222,7 +242,7 @@ COWPtr CollisionObjectFromLink(OR::KinBody::LinkPtr link, bool useTrimesh) {
 
   if ((link->GetGeometries().size() == 1) && isIdentity(link->GetGeometry(0)->GetTransform())) {
     LOG_DEBUG("using identity for %s", link->GetName().c_str());
-    btCollisionShape* shape = createShapePrimitive(link->GetGeometry(0), useTrimesh, cow.get());
+    btCollisionShape* shape = createShapePrimitive(link->GetGeometry(0), useTrimesh, false, cow.get());
     shape->setMargin(MARGIN);
     cow->manage(shape);
     cow->setCollisionShape(shape);
@@ -237,7 +257,7 @@ COWPtr CollisionObjectFromLink(OR::KinBody::LinkPtr link, bool useTrimesh) {
 
     BOOST_FOREACH(const boost::shared_ptr<OpenRAVE::KinBody::Link::Geometry>& geom, geometries) {
 
-      btCollisionShape* subshape = createShapePrimitive(geom, useTrimesh, cow.get());
+      btCollisionShape* subshape = createShapePrimitive(geom, useTrimesh, false, cow.get());
       if (subshape != NULL) {
         cow->manage(subshape);
         subshape->setMargin(MARGIN);
