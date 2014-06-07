@@ -177,6 +177,18 @@ public:
   void update() {
     for (int i=0; i < links.size(); ++i) {
       nodes[i]->setMatrix(asOsgMatrix(links[i]->GetTransform()));
+      const vector<KinBody::Link::GeometryPtr>& geoms = links[i]->GetGeometries();
+      for (int j=0; j < geoms.size(); ++j) {
+        osg::MatrixTransform* mt = static_cast<osg::MatrixTransform*>(nodes[i]->getChild(j));
+        osg::Node* geom_node = mt->getChild(0);
+        osg::StateSet* state = geom_node->getOrCreateStateSet();
+        osg:Material* mat = static_cast<osg::Material*>(state->getAttribute(osg::StateAttribute::MATERIAL));
+        OpenRAVE::Vector diffuse = geoms[j]->GetDiffuseColor();
+        mat->setDiffuse( osg::Material::FRONT_AND_BACK, osg::Vec4(diffuse.x, diffuse.y, diffuse.z, 1) );
+        OpenRAVE::Vector amb = geoms[j]->GetAmbientColor();
+        mat->setAmbient( osg::Material::FRONT_AND_BACK, osg::Vec4(amb.x,amb.y,amb.z,1)*.5 );
+        mat->setTransparency(osg::Material::FRONT_AND_BACK,geoms[j]->GetTransparency());
+      }
     }
   }
 
