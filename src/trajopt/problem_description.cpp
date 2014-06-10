@@ -421,7 +421,10 @@ void PoseCostInfo::fromJson(const Value& v) {
 void PoseCostInfo::hatch(TrajOptProb& prob) {
   VectorOfVectorPtr f(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   if (term_type == TT_COST) {
-    prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), concat(rot_coeffs, pos_coeffs), ABS, name)));
+    VectorOfVectorPtr f_pos(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+    VectorOfVectorPtr f_rot(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+    prob.addCost(CostPtr(new CostFromErrFunc(f_pos, prob.GetVarRow(timestep), concat(Vector3d::Zero(), pos_coeffs), SQUARED, name)));
+    prob.addCost(CostPtr(new CostFromErrFunc(f_rot, prob.GetVarRow(timestep), concat(rot_coeffs, Vector3d::Zero()), SQUARED, name)));
   }
   else if (term_type == TT_CNT) {
     prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, prob.GetVarRow(timestep), concat(rot_coeffs, pos_coeffs), EQ, name)));
