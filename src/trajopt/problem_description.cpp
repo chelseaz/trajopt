@@ -418,13 +418,39 @@ void PoseCostInfo::fromJson(const Value& v) {
 
 }
 
+struct SqrtErrCalculator : public VectorOfVector {
+  VectorOfVectorPtr f_;
+  SqrtErrCalculator(VectorOfVectorPtr f) :
+    f_(f) {}
+  VectorXd operator()(const VectorXd& dof_vals) const {
+    return f_->call(dof_vals).array().sqrt();
+  }
+};
+
+struct l2NormErrCalculator : public VectorOfVector {
+  VectorOfVectorPtr f_;
+  VectorXd coeffs_;
+  l2NormErrCalculator(VectorOfVectorPtr f, const VectorXd& coeffs) :
+    f_(f),
+    coeffs_(coeffs) {}
+  VectorXd operator()(const VectorXd& dof_vals) const {
+    VectorXd err = f_->call(dof_vals);
+    if (coeffs_.size()>0) err.array() *= coeffs_.array();
+    return err.norm() * VectorXd::Ones(1);
+  }
+};
+
 void PoseCostInfo::hatch(TrajOptProb& prob) {
   VectorOfVectorPtr f(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   if (term_type == TT_COST) {
     VectorOfVectorPtr f_pos(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
+    VectorOfVectorPtr f_pos_norm(new l2NormErrCalculator(f_pos, concat(Vector3d::Zero(), pos_coeffs)));
     VectorOfVectorPtr f_rot(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
-    prob.addCost(CostPtr(new CostFromErrFunc(f_pos, prob.GetVarRow(timestep), concat(Vector3d::Zero(), pos_coeffs), SQUARED, name)));
-    prob.addCost(CostPtr(new CostFromErrFunc(f_rot, prob.GetVarRow(timestep), concat(rot_coeffs, Vector3d::Zero()), SQUARED, name)));
+    VectorOfVectorPtr f_rot_norm(new l2NormErrCalculator(f_rot, concat(rot_coeffs, Vector3d::Zero())));
+    VectorOfVectorPtr f_pos_sqrt_norm(new SqrtErrCalculator(f_pos_norm));
+    VectorOfVectorPtr f_rot_sqrt_norm(new SqrtErrCalculator(f_rot_norm));
+    prob.addCost(CostPtr(new CostFromErrFunc(f_pos_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
+    prob.addCost(CostPtr(new CostFromErrFunc(f_rot_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
   }
   else if (term_type == TT_CNT) {
     prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, prob.GetVarRow(timestep), concat(rot_coeffs, pos_coeffs), EQ, name)));
