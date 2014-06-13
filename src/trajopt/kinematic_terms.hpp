@@ -39,6 +39,19 @@ struct CartPoseErrCalculator : public VectorOfVector {
   VectorXd operator()(const VectorXd& dof_vals) const;
 };
 
+struct RelPtsErrCalculator : public VectorOfVector {
+  vector<OR::Vector> xyzs_;
+  vector<OR::Vector> rel_xyzs_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  RelPtsErrCalculator(const vector<OR::Vector>& xyzs, const vector<OR::Vector>& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+    xyzs_(xyzs),
+    rel_xyzs_(rel_xyzs),
+    manip_(manip),
+    link_(link) {}
+  VectorXd operator()(const VectorXd& dof_vals) const;
+};
+
 struct CartPoseErrorPlotter : public Plotter {
   boost::shared_ptr<void> m_calc; //actually points to a CartPoseErrCalculator = CartPoseCost::f_
   VarVector m_vars;
@@ -46,6 +59,12 @@ struct CartPoseErrorPlotter : public Plotter {
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 
+struct RelPtsErrorPlotter : public Plotter {
+  boost::shared_ptr<void> m_calc;
+  VarVector m_vars;
+  RelPtsErrorPlotter(boost::shared_ptr<void> calc, const VarVector& vars) : m_calc(calc), m_vars(vars) {}
+  void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
+};
 
 struct CartVelJacCalculator : MatrixOfVector {
   ConfigurationPtr manip_;

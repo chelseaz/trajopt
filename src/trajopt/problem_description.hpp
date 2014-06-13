@@ -282,6 +282,17 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
   DEFINE_CREATE(JointConstraintInfo)
 };
 
+struct RelPtsCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
+  int timestep;
+  vector<Vector3d> xyzs;
+  vector<Vector3d> rel_xyzs;
+  VectorXd pos_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(RelPtsCostInfo);
+};
+
 struct TpsCostConstraintInfo : public TermInfo, public MakesCost {
   MatrixXd H;
   MatrixXd f;

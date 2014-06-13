@@ -67,6 +67,19 @@ VectorXd CartPoseErrCalculator::operator()(const VectorXd& dof_vals) const {
   return err;  
 }
 
+
+VectorXd RelPtsErrCalculator::operator()(const VectorXd& dof_vals) const {
+  manip_->SetDOFValues(toDblVec(dof_vals));
+  OR::Transform newpose = link_->GetTransform();
+
+  VectorXd err(xyzs_.size());
+  for (int i = 0; i < xyzs_.size(); i++) {
+     err(i) = sqrt((xyzs_[i] - newpose * rel_xyzs_[i]).lengthsqr3());
+  }
+  return err;
+}
+
+
 #if 0
 CartPoseCost::CartPoseCost(const VarVector& vars, const OR::Transform& pose, RobotAndDOFPtr manip, KinBody::LinkPtr link, const VectorXd& coeffs) :
     CostFromErrFunc(VectorOfVectorPtr(new CartPoseErrCalculator(pose, manip, link)), vars, coeffs, ABS, "CartPose")
@@ -87,6 +100,15 @@ void CartPoseErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::
   handles.push_back(env.drawarrow(cur.trans, target.trans, .005, OR::Vector(1,0,1,1)));
 }
 
+void RelPtsErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles) {
+  RelPtsErrCalculator* calc = static_cast<RelPtsErrCalculator*>(m_calc.get());
+  DblVec dof_vals = getDblVec(x, m_vars);
+  calc->manip_->SetDOFValues(dof_vals);
+  OR::Transform cur = calc->link_->GetTransform();
+  for (int i = 0; i < calc->xyzs_.size(); i++) {
+     handles.push_back(env.drawarrow(cur * calc->rel_xyzs_[i], calc->xyzs_[i], .005, OR::Vector(1,0,1,1)));
+  }
+}
 
 #if 0
 struct CartPositionErrCalculator {

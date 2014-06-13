@@ -50,6 +50,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
+  TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create);
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
 
@@ -659,6 +660,56 @@ void JointConstraintInfo::hatch(TrajOptProb& prob) {
     prob.addLinearConstraint(exprSub(AffExpr(vars[j]), vals[j]), EQ);    
   }
 }
+
+
+void RelPtsCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+  childFromJson(params, xyzs, "xyzs");
+  childFromJson(params, rel_xyzs, "rel_xyzs");
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(xyzs.size()));
+
+  if (xyzs.size() != rel_xyzs.size()) {
+    PRINT_AND_THROW(boost::format("size of xyzs %d should be the same as size of rel_xyzs %d")%xyzs.size()%rel_xyzs.size());
+  }
+
+  string linkstr;
+  childFromJson(params, linkstr, "link");
+  link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+  if (!link) {
+    PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+  }
+
+  const char* all_fields[] = {"timestep", "xyzs", "rel_xyzs", "pos_coeffs", "link"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+
+}
+
+void RelPtsCostInfo::hatch(TrajOptProb& prob) {
+  vector<OR::Vector> rave_xyzs(xyzs.size());
+  vector<OR::Vector> rave_rel_xyzs(rel_xyzs.size());
+  for (int i = 0; i < xyzs.size(); i++) {
+    for (int j = 0; j < 3; j++) {
+      rave_xyzs[i][j] = xyzs[i](j);
+      rave_rel_xyzs[i][j] = rel_xyzs[i](j);
+    }
+  }
+  VectorOfVectorPtr f(new RelPtsErrCalculator(rave_xyzs, rave_rel_xyzs, prob.GetRAD(), link));
+  if (term_type == TT_COST) {
+    VectorOfVectorPtr f_norm(new l2NormErrCalculator(f, pos_coeffs));
+    VectorOfVectorPtr f_sqrt_norm(new SqrtErrCalculator(f_norm));
+    prob.addCost(CostPtr(new CostFromErrFunc(f_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
+  }
+  else if (term_type == TT_CNT) {
+    prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, prob.GetVarRow(timestep), pos_coeffs, EQ, name)));
+  }
+
+  prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
+  prob.GetPlotter()->AddLink(link);
+
+}
+
 
 void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
