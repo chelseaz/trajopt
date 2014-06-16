@@ -715,31 +715,27 @@ void TpsCostConstraintInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
 
-  FAIL_IF_FALSE(params.isMember("H"));
-  Json::fromJson(params["H"], H);
-
-  FAIL_IF_FALSE(params.isMember("f"));
-  Json::fromJson(params["f"], f);
-
   FAIL_IF_FALSE(params.isMember("x_na"));
   Json::fromJson(params["x_na"], x_na);
-
-  FAIL_IF_FALSE(params.isMember("N"));
-  Json::fromJson(params["N"], N);
 
   FAIL_IF_FALSE(params.isMember("y_ng"));
   Json::fromJson(params["y_ng"], y_ng);
 
+  FAIL_IF_FALSE(params.isMember("bend_coefs"));
+  Json::fromJson(params["bend_coefs"], bend_coefs);
+
+  FAIL_IF_FALSE(params.isMember("rot_coefs"));
+  Json::fromJson(params["rot_coefs"], rot_coefs);
+
   FAIL_IF_FALSE(params.isMember("wt_n"));
   Json::fromJson(params["wt_n"], wt_n);
 
-  FAIL_IF_FALSE(params.isMember("rot_coef"));
-  Json::fromJson(params["rot_coef"], rot_coef);
+  FAIL_IF_FALSE(params.isMember("N"));
+  Json::fromJson(params["N"], N);
 
   childFromJson(params, alpha, "alpha");
-  childFromJson(params, lambda, "lambda");
 
-  const char* all_fields[] = {"H", "f", "x_na", "N", "y_ng", "wt_n", "rot_coef", "alpha", "lambda"};
+  const char* all_fields[] = {"x_na", "y_ng", "bend_coefs", "rot_coefs", "wt_n", "N", "alpha"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
@@ -749,17 +745,14 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   int n = tps_vars.rows();
   int dim = tps_vars.cols();
   assert(dim == 3);
-  assert(H.rows() == n+dim+1);
-  assert(H.cols() == n+dim+1);
-  assert(f.rows() == n+dim+1);
-  assert(f.cols() == dim);
-  assert(N.rows() == n+dim+1);
-  assert(N.cols() == n);
   assert(x_na.rows() == n);
   assert(x_na.cols() == dim);
-  assert(wt_n.size() == n);
+  assert(wt_n.rows() == n);
+  assert(wt_n.cols() == dim);
+  assert(N.rows() == n+dim+1);
+  assert(N.cols() == n);
 
-  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, H, f, x_na, N, y_ng, wt_n, rot_coef, alpha, lambda));
+  boost::shared_ptr<TpsCost> tps_cost(new TpsCost(tps_vars, x_na, y_ng, bend_coefs, rot_coefs, wt_n, N, alpha));
   prob.addCost(CostPtr(tps_cost));
   prob.getCosts().back()->setName(name);
 

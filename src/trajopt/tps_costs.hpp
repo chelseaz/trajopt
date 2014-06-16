@@ -32,29 +32,34 @@ public:
   vector<Matrix3d> compute_jacobian(const MatrixXd& x_ma);
 };
 
+using namespace Eigen;
+MatrixXd TRAJOPT_API tps_fit3(const MatrixX3d& x_na, const MatrixX3d& y_ng, double bend_coef, const Vector3d& rot_coef, const VectorXd& wt_n);
+MatrixXd TRAJOPT_API tps_rpm_bij_corr_iter_part(const MatrixX3d& x_nd, const MatrixX3d& y_md, const Vector3d& trans_g, int n_iter, const VectorXd& regs, const VectorXd& rads, const Vector3d& rot_reg);
+
 class TRAJOPT_API TpsCost : public Cost {
   /**
    * solve equality-constrained qp
-   * min tr(x'Hx) + sum(f'x)
+   * min tr(x'Hx) + 2 tr(f'x)
    * s.t. Ax = 0
    */
 public:
-  TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, const VectorXd& wt_n, const VectorXd& rot_coef, double alpha, double lambda);
+  TpsCost(const VarArray& tps_vars, const MatrixX3d& x_na, const MatrixX3d& y_ng, const Vector3d& bend_coefs, const Vector3d& rot_coefs, const MatrixX3d& wt_n, const MatrixXd& N, double alpha);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
 //private: // TODO should be private
   VarArray tps_vars_;
-  MatrixXd H_;
-  MatrixXd f_;
-  MatrixXd x_na_;
+  MatrixX3d x_na_;
+  MatrixX3d y_ng_;
+  Vector3d bend_coefs_;
+  Vector3d rot_coefs_;
+  MatrixX3d wt_n_;
   MatrixXd N_;
-  MatrixXd y_ng_;
-  VectorXd wt_n_;
-  VectorXd rot_coef_;
   double alpha_;
-  double lambda_;
-  MatrixXd NHN_;
-  MatrixXd fN_;
+
+private:
+  vector<MatrixXd> NHNs;
+  vector<VectorXd> fNs;
+
   QuadExpr expr_;
 };
 

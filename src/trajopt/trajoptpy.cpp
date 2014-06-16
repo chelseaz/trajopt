@@ -7,6 +7,7 @@
 #include "sco/modeling_utils.hpp"
 #include "numpy_utils.hpp"
 #include "trajopt/hacd_interface.hpp"
+#include "trajopt/tps_costs.hpp"
 using namespace trajopt;
 using namespace Eigen;
 using namespace OpenRAVE;
@@ -404,6 +405,45 @@ py::object PyConvexDecompHACD(py::object py_mesh, float concavity) {
   return out;
 }
 
+MatrixXd toMatrixXd(py::object np_m) {
+  py::object shape = np_m.attr("shape");
+  MatrixXd m = Map<const MatrixXd>(getPointer<double>(np_m), py::extract<int>(shape[0]), py::extract<int>(shape[1]));
+  return m;
+}
+
+VectorXd toVectorXd(py::object np_m) {
+  py::object shape = np_m.attr("shape");
+  VectorXd m = Map<const VectorXd>(getPointer<double>(np_m), py::extract<int>(np_m.attr("size")));
+  return m;
+}
+
+py::object py_tps_fit3(py::object np_x_na, py::object np_y_ng, double bend_coef, py::object np_rot_coef, py::object np_wt_n) {
+  MatrixXd x_na = toMatrixXd(np_x_na);
+  MatrixXd y_ng = toMatrixXd(np_y_ng);
+  VectorXd rot_coef = toVectorXd(np_rot_coef);
+  VectorXd wt_n = toVectorXd(np_wt_n);
+  MatrixXd Theta;
+  for (int i = 0; i < 4000; i++) {
+    Theta = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n);
+  }
+  py::object np_Theta = np_mod.attr("array")(toNdarray2<double>(Theta.data(), Theta.rows(), Theta.cols()), "float64");
+  return np_Theta;
+}
+
+py::object py_tps_rpm_bij_corr_iter_part(py::object np_x_nd, py::object np_y_md, py::object np_trans_g, int n_iter, py::object np_regs, py::object np_rads, py::object np_rot_reg) {
+  MatrixXd x_nd = toMatrixXd(np_x_nd);
+  MatrixXd y_md = toMatrixXd(np_y_md);
+  VectorXd trans_g = toVectorXd(np_trans_g);
+  VectorXd regs = toVectorXd(np_regs);
+  VectorXd rads = toVectorXd(np_rads);
+  VectorXd rot_reg = toVectorXd(np_rot_reg);
+  MatrixXd corr_nm;
+  for (int i = 0; i < 100; i++) {
+    corr_nm = tps_rpm_bij_corr_iter_part(x_nd, y_md, trans_g, n_iter, regs, rads, rot_reg);
+  }
+  py::object np_corr_nm = np_mod.attr("array")(toNdarray2<double>(corr_nm.data(), corr_nm.rows(), corr_nm.cols()), "float64");
+  return np_corr_nm;
+}
 
 BOOST_PYTHON_MODULE(ctrajoptpy) {
 
@@ -415,6 +455,9 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   if (OPENRAVE_VERSION_STRING != pyversion) {
     PRINT_AND_THROW("the openrave on your pythonpath is different from the openrave version that trajopt links to!");
   }
+
+  py::def("tps_fit3", &py_tps_fit3);
+  py::def("tps_rpm_bij_corr_iter_part", &py_tps_rpm_bij_corr_iter_part);
 
   py::class_<PyTrajOptProb>("TrajOptProb", py::no_init)
       .def("GetDOFIndices", &PyTrajOptProb::GetDOFIndices)

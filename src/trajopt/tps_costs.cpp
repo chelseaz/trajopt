@@ -75,7 +75,7 @@ void python_check_transform_hmats(ThinPlateSpline& f, const OR::Transform& src_p
   cout << "print warped_src_pose" << endl;
 }
 
-MatrixXd cdist(const MatrixXd& A, const MatrixXd& B) {
+MatrixXd cdist(const MatrixX3d& A, const MatrixX3d& B) {
   int m_A = A.rows();
   int n = A.cols();
   int m_B = B.rows();
@@ -98,7 +98,7 @@ MatrixXd tps_apply_kernel(const MatrixXd& distmat, int dim) {
   }
 }
 
-MatrixXd tps_kernel_matrix2(const MatrixXd& x_na, const MatrixXd& y_ma) {
+MatrixXd tps_kernel_matrix2(const MatrixX3d& x_na, const MatrixX3d& y_ma) {
   int dim = x_na.cols();
   MatrixXd distmat = cdist(x_na, y_ma);
   return tps_apply_kernel(distmat, dim);
@@ -107,6 +107,127 @@ MatrixXd tps_kernel_matrix2(const MatrixXd& x_na, const MatrixXd& y_ma) {
 MatrixXd tps_eval(const MatrixXd& x_ma, const MatrixXd& lin_ag, const VectorXd& trans_g, const MatrixXd& w_ng, const MatrixXd& x_na) {
   MatrixXd K_mn = tps_kernel_matrix2(x_ma, x_na);
   return ((MatrixXd)(K_mn * w_ng + x_ma * lin_ag)).rowwise() + trans_g.transpose();
+}
+
+MatrixX3d solve_eqp1(const MatrixXd& H, const MatrixX3d& f, const Matrix4Xd& A) {
+  /*
+   * solve equality-constrained qp
+   * min tr(x'Hx) + sum(f'x)
+   * s.t. Ax = 0
+   */
+  int n_vars = H.rows();
+  assert(H.cols() == n_vars);
+  assert(f.rows() == n_vars);
+  assert(A.cols() == n_vars);
+  int n_cnts = A.rows();
+
+  JacobiSVD<MatrixXd> svd(A.transpose(), ComputeFullU);
+  MatrixXd U = svd.matrixU();
+  MatrixXd N = U.rightCols(U.cols() - n_cnts);
+  // columns of N span the null space
+
+  // x = Nz
+  // then problem becomes unconstrained minimization .5*z'NHNz + z'Nf
+  // NHNz + Nf = 0
+  MatrixXd NHN = N.transpose()*H*N;
+  MatrixX3d b = -N.transpose()*f;
+  MatrixX3d z = NHN.llt().solve(b);
+
+  MatrixX3d x = N * z;
+
+  return x;
+}
+
+MatrixXd tps_fit3(const MatrixX3d& x_na, const MatrixX3d& y_ng, double bend_coef, const Vector3d& rot_coef, const VectorXd& wt_n) {
+    int n = x_na.rows();
+    int d = x_na.cols();
+
+    MatrixXd K_nn = tps_kernel_matrix2(x_na, x_na);
+    MatrixXd Q(n,1+d+n);
+    Q.leftCols(1) = MatrixXd::Ones(n,1);
+    Q.middleCols(1,d) = x_na;
+    Q.rightCols(n) = K_nn;
+    MatrixXd WQ = Q.cwiseProduct(wt_n.rowwise().replicate(Q.cols()));
+    MatrixXd QWQ = Q.transpose() * WQ;
+    MatrixXd& H = QWQ;
+    H.block(d+1,d+1,n,n) += bend_coef * K_nn;
+    H.block(1,1,d,d) += rot_coef.asDiagonal();
+
+    MatrixX3d f = -WQ.transpose() * y_ng;
+    f.middleRows(1,d) -= (Matrix3d)rot_coef.asDiagonal();
+
+    Matrix4Xd A(4,1+d+n);
+    A.leftCols(1+d) = MatrixXd::Zero(1+d,1+d);
+    A.block(0,1+d,1,n) = MatrixXd::Ones(1,n);
+    A.bottomRightCorner(d,n) = x_na.transpose();
+
+    MatrixX3d Theta = solve_eqp1(H,f,A);
+
+    return Theta;
+}
+
+MatrixXd balance_matrix3(const MatrixXd& prob_nm, int max_iter, double p, double outlierfrac) {
+  int n = prob_nm.rows();
+  int m = prob_nm.cols();
+  MatrixXd prob_NM(n+1, m+1);
+  prob_NM.topLeftCorner(n,m) = prob_nm;
+  prob_NM.col(m) = p*VectorXd::Ones(n+1);
+  prob_NM.row(n) = p*VectorXd::Ones(m+1);
+  prob_NM(n,m) = p*sqrt(n*m);
+
+  VectorXd a_N = VectorXd::Ones(n+1);
+  a_N(n) = m*outlierfrac;
+  VectorXd b_M = VectorXd::Ones(m+1);
+  b_M(m) = n*outlierfrac;
+
+  VectorXd r_N = VectorXd::Ones(n+1);
+  VectorXd c_M;
+  for (int i = 0; i < max_iter; i++) {
+    c_M = b_M.cwiseQuotient(prob_NM.transpose() * r_N);
+    r_N = a_N.cwiseQuotient(prob_NM * c_M);
+  }
+
+  prob_NM = prob_NM.array() * r_N.rowwise().replicate(m+1).array() * c_M.rowwise().replicate(n+1).transpose().array();
+
+  return prob_NM.block(0,0,n,m);
+}
+
+MatrixXd tps_rpm_bij_corr_iter_part(const MatrixX3d& x_nd, const MatrixX3d& y_md, const Vector3d& trans_g, int n_iter, const VectorXd& regs, const VectorXd& rads, const Vector3d& rot_reg) {
+  int n = x_nd.rows();
+  int m = y_md.rows();
+
+  ThinPlateSpline f(x_nd), g(y_md);
+  f.trans_g_ = trans_g;
+  g.trans_g_ = -trans_g;
+
+  MatrixX3d xwarped_nd, ywarped_md;
+  MatrixXd fwddist_nm, invdist_nm;
+  MatrixXd prob_nm, corr_nm;
+  VectorXd wt_n, wt_m;
+  MatrixX3d xtarg_nd, ytarg_md;
+  for (int i = 0; i < n_iter; i++) {
+    xwarped_nd = f.transform_points(x_nd);
+    ywarped_md = g.transform_points(y_md);
+
+    fwddist_nm = cdist(xwarped_nd, y_md);
+    invdist_nm = cdist(x_nd, ywarped_md);
+
+    double r = rads[i];
+    prob_nm = (-(fwddist_nm + invdist_nm) / (2*r)).array().exp();
+    corr_nm = balance_matrix3(prob_nm, 10, .1, 1e-2);
+    corr_nm.array() += 1e-9;
+
+    wt_n = corr_nm.rowwise().sum();
+    wt_m = corr_nm.colwise().sum();
+
+    MatrixXd tmp = wt_n.rowwise().replicate(m);
+    xtarg_nd = corr_nm.cwiseQuotient(wt_n.rowwise().replicate(m)) * y_md;
+    ytarg_md = corr_nm.transpose().cwiseQuotient(wt_m.rowwise().replicate(n)) * x_nd;
+
+    f.setTheta(tps_fit3(x_nd, xtarg_nd, regs[i], rot_reg, wt_n));
+    g.setTheta(tps_fit3(y_md, ytarg_md, regs[i], rot_reg, wt_m));
+  }
+  return corr_nm;
 }
 
 // maybe there is better way to do this
@@ -226,6 +347,9 @@ ThinPlateSpline::ThinPlateSpline(const MatrixXd& x_na) {
   n_ = x_na.rows();
   d_ = x_na.cols();
   x_na_ = x_na;
+  lin_ag_ = MatrixXd::Identity(d_,d_);
+  trans_g_ = VectorXd::Zero(d_);
+  w_ng_ = MatrixXd::Zero(n_,d_);
 }
 
 ThinPlateSpline::ThinPlateSpline(const MatrixXd& theta, const MatrixXd& x_na) {
@@ -260,86 +384,126 @@ vector<Matrix3d> ThinPlateSpline::compute_jacobian(const MatrixXd& x_ma) {
 }
 
 
-TpsCost::TpsCost(const VarArray& tps_vars, const MatrixXd& H, const MatrixXd& f, const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, const VectorXd& wt_n, const VectorXd& rot_coef, double alpha, double lambda) :
-    Cost("Tps"), tps_vars_(tps_vars), H_(H), f_(f), x_na_(x_na), N_(N), y_ng_(y_ng), wt_n_(wt_n), rot_coef_(rot_coef), alpha_(alpha), lambda_(lambda) {
+TpsCost::TpsCost(const VarArray& tps_vars, const MatrixX3d& x_na, const MatrixX3d& y_ng, const Vector3d& bend_coefs, const Vector3d& rot_coefs, const MatrixX3d& wt_n, const MatrixXd& N, double alpha) :
+    Cost("Tps"), tps_vars_(tps_vars), x_na_(x_na), y_ng_(y_ng), bend_coefs_(bend_coefs), rot_coefs_(rot_coefs), wt_n_(wt_n), N_(N), alpha_(alpha) {
   /**
    * solve equality-constrained qp
-   * min tr(x'Hx) + sum(f'x)
+   * min tr(x'Hx) + 2 tr(f'x)
    * s.t. Ax = 0
    *
    * Let x = Nz
-   * then the problem becomes the unconstrained minimization z'NHNz + f'Nz
+   * then the problem becomes the unconstrained minimization tr(z'N'HNz) + 2 tr(f'Nz)
    */
   int n = tps_vars.rows();
   int dim = tps_vars.cols();
   assert(dim == 3);
   assert(tps_vars.cols() == dim);
-  assert(H.rows() == n+dim+1);
-  assert(H.cols() == n+dim+1);
-  assert(f.rows() == n+dim+1);
-  assert(f.cols() == dim);
   assert(x_na.rows() == n);
   assert(x_na.cols() == dim);
   assert(N.rows() == n+dim+1);
   assert(N.cols() == n);
   assert(y_ng.rows() == n);
   assert(y_ng.cols() == dim);
-  assert(wt_n.size() == n);
+  assert(wt_n.rows() == n);
+  assert(wt_n.cols() == dim);
 
-  NHN_ = N_.transpose()*H_*N_;
+  MatrixXd K_nn = tps_kernel_matrix2(x_na_, x_na_);
+  MatrixXd Q(n,1+dim+n);
+  Q.leftCols(1) = MatrixXd::Ones(n,1);
+  Q.middleCols(1,dim) = x_na_;
+  Q.rightCols(n) = K_nn;
 
   QuadExpr exprTrzNHNz;
-  exprTrzNHNz.coeffs.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
-  exprTrzNHNz.vars1.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
-  exprTrzNHNz.vars2.reserve(dim * NHN_.rows()*(NHN_.cols()+1)/2);
+  exprTrzNHNz.coeffs.reserve(dim * (1+dim+n)*(1+dim+n + 1)/2);
+  exprTrzNHNz.vars1.reserve(dim * (1+dim+n)*(1+dim+n + 1)/2);
+  exprTrzNHNz.vars2.reserve(dim * (1+dim+n)*(1+dim+n + 1)/2);
+
+  AffExpr expr2TrfNz;
+  expr2TrfNz.coeffs.reserve(dim*(1+dim+n));
+  expr2TrfNz.vars.reserve(dim*(1+dim+n));
+
   for (int d = 0; d < dim; d++) {
-    for (int i = 0; i < NHN_.rows(); i++) {
-      for (int j = i; j < NHN_.cols(); j++) {
+    VectorXd wt_n_d = wt_n_.col(d);
+    MatrixXd WQ = Q.cwiseProduct(wt_n_d.rowwise().replicate(Q.cols()));
+    MatrixXd QWQ = Q.transpose() * WQ;
+    MatrixXd H = QWQ;
+    H.block(dim+1,dim+1,n,n) += bend_coefs_(d) * K_nn;
+    H.block(1,1,dim,dim) += rot_coefs_.asDiagonal();
+
+    VectorXd f = -WQ.transpose() * y_ng_.col(d);
+    f(1+d) -= rot_coefs_(d);
+
+    MatrixXd NHN = N_.transpose()*H*N_;
+
+    for (int i = 0; i < NHN.rows(); i++) {
+      for (int j = i; j < NHN.cols(); j++) {
         if (i == j) {
-          exprTrzNHNz.coeffs.push_back(NHN_(i,j));
+          exprTrzNHNz.coeffs.push_back(NHN(i,j));
         } else {
-          exprTrzNHNz.coeffs.push_back(NHN_(i,j)+NHN_(j,i));
+          exprTrzNHNz.coeffs.push_back(NHN(i,j)+NHN(j,i));
         }
         exprTrzNHNz.vars1.push_back(tps_vars_(i,d));
         exprTrzNHNz.vars2.push_back(tps_vars_(j,d));
       }
     }
-  }
+    NHNs.push_back(NHN);
 
-  fN_ = f_.transpose() * N_;
+    VectorXd fN = f.transpose() * N_;
 
-  AffExpr exprTrfNz;
-  exprTrfNz.coeffs.reserve(fN_.rows()*fN_.cols());
-  exprTrfNz.vars.reserve(fN_.rows()*fN_.cols());
-  for (int i = 0; i < fN_.rows(); i++) {
-    for (int j = 0; j < fN_.cols(); j++) {
-      exprTrfNz.coeffs.push_back(fN_(i,j));
-      exprTrfNz.vars.push_back(tps_vars_(j,i));
+    for (int j = 0; j < fN.size(); j++) {
+      expr2TrfNz.coeffs.push_back(2.0*fN(j));
+      expr2TrfNz.vars.push_back(tps_vars_(j,d));
     }
+    fNs.push_back(fN);
   }
 
   expr_ = exprTrzNHNz;
-  exprInc(expr_, exprTrfNz);
-  VectorXd w_sqrt = wt_n_.array().sqrt();
-  exprInc(expr_, y_ng_.cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm());
-  exprScale(expr_, alpha/double(n));
+  exprInc(expr_, expr2TrfNz);
+  MatrixXd w_sqrt = wt_n_.array().sqrt();
+  double const_term = y_ng_.cwiseProduct(w_sqrt).squaredNorm() + rot_coefs_.sum();
+  exprInc(expr_, const_term);
+  exprScale(expr_, alpha);
 }
 
 double TpsCost::value(const vector<double>& xvec) {
   MatrixXd z = getTraj(xvec, tps_vars_);
-  VectorXd w_sqrt = wt_n_.array().sqrt();
-  double obj_value = (alpha_/double(x_na_.rows())) * ((z.transpose() * NHN_ * z).trace() + (fN_ * z).trace() + y_ng_.cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm());
+  MatrixXd w_sqrt = wt_n_.array().sqrt();
+
+  double obj_value = 0, quad_obj_value = 0, lin_obj_value = 0;
+  for (int d = 0; d < NHNs.size(); d++) {
+    quad_obj_value += (z.col(d).transpose() * NHNs[d] * z.col(d)).trace();
+  }
+  for (int d = 0; d < fNs.size(); d++) {
+    lin_obj_value += 2.0*(fNs[d].dot(z.col(d)));
+  }
+  obj_value = alpha_ * (quad_obj_value + lin_obj_value + y_ng_.cwiseProduct(w_sqrt).squaredNorm() + rot_coefs_.sum());
 
 //  MatrixXd theta = N_ * z;
 //  ThinPlateSpline f(theta, x_na_);
 //  MatrixXd f_x_na = f.transform_points(x_na_);
 //  MatrixXd K = tps_kernel_matrix2(f.x_na_, f.x_na_);
 //
-//  double obj_explicit = (alpha_/double(x_na_.rows())) * ((f_x_na - y_ng_).cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm() + lambda_*(f.w_ng_.transpose()*K*f.w_ng_).trace()
-//      + (f.lin_ag_.transpose()*rot_coef_.asDiagonal()*f.lin_ag_).trace() - (rot_coef_.asDiagonal()*f.lin_ag_.transpose()).trace());
+//  int n = tps_vars_.rows();
+//  int dim = tps_vars_.cols();
+//  MatrixXd Q(n,1+dim+n);
+//  Q.leftCols(1) = MatrixXd::Ones(n,1);
+//  Q.middleCols(1,dim) = x_na_;
+//  Q.rightCols(n) = K;
+//
+//  double quad_explicit = (f_x_na - y_ng_).cwiseProduct(w_sqrt).squaredNorm() + 2.0 * (y_ng_.cwiseProduct(wt_n_).transpose() * Q * theta).trace() - y_ng_.cwiseProduct(w_sqrt).squaredNorm()
+//      + (bend_coefs_.asDiagonal() * f.w_ng_.transpose()*K*f.w_ng_).trace()
+//      + (f.lin_ag_.transpose() * rot_coefs_.asDiagonal() * f.lin_ag_).trace();
+//  double lin_explicit = -2.0 * (y_ng_.cwiseProduct(wt_n_).transpose() * Q * theta).trace() - 2.0*(rot_coefs_.asDiagonal() * f.lin_ag_).trace();
+//
+//  cout << "quad value check " << quad_explicit << " " << quad_obj_value << endl;
+//  cout << "lin value check " << lin_explicit << " " << lin_obj_value << endl;
+//
+//  double obj_explicit = alpha_ * ((f_x_na - y_ng_).cwiseProduct(w_sqrt).squaredNorm()
+//      + (bend_coefs_.asDiagonal() * f.w_ng_.transpose()*K*f.w_ng_).trace()
+//      + ((f.lin_ag_ - Matrix3d::Identity()).transpose() * rot_coefs_.asDiagonal() * (f.lin_ag_ - Matrix3d::Identity())).trace());
+//
 //  double obj_expr = expr_.value(xvec);
-//  cout << "value check " << obj_value << " " << obj_explicit << " " << obj_expr << endl;
-//  cout << "error term only " << (alpha_/double(x_na_.rows())) * ((f_x_na - y_ng_).cwiseProduct(w_sqrt.replicate(1,3)).squaredNorm()) << endl;
+//  cout << "value check " << obj_explicit << " " << obj_value << " " << obj_expr << endl;
 
   return obj_value;
 }
@@ -449,7 +613,7 @@ VectorXd TpsCorrErrCalculator::operator()(const VectorXd& theta_vals) const {
   MatrixXd theta = N_ * Map<const MatrixXd>(theta_vals.data(), n, d);
   ThinPlateSpline f(theta, x_na_);
   MatrixXd f_x_na = f.transform_points(x_na_);
-  VectorXd err = (alpha_/double(x_na_.rows())) * (f_x_na - y_ng_).norm() * VectorXd::Ones(1); // TODO include regularizer
+  VectorXd err = (alpha_) * (f_x_na - y_ng_).norm() * VectorXd::Ones(1); // TODO include regularizer
   cout << "err " << err << endl;
   return err;
 }

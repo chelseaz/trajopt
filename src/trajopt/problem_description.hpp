@@ -294,15 +294,13 @@ struct RelPtsCostInfo : public TermInfo, public MakesCost, public MakesConstrain
 };
 
 struct TpsCostConstraintInfo : public TermInfo, public MakesCost {
-  MatrixXd H;
-  MatrixXd f;
   MatrixXd x_na;
-  MatrixXd N;
   MatrixXd y_ng;
-  VectorXd wt_n;
-  VectorXd rot_coef;
+  Vector3d bend_coefs;
+  Vector3d rot_coefs;
+  MatrixXd wt_n;
+  MatrixXd N;
   double alpha;
-  double lambda;
 
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
