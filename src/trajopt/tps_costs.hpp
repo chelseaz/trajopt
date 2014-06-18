@@ -46,7 +46,9 @@ public:
   TpsCost(const VarArray& tps_vars, const MatrixX3d& x_na, const MatrixX3d& y_ng, const Vector3d& bend_coefs, const Vector3d& rot_coefs, const MatrixX3d& wt_n, const MatrixXd& N, double alpha);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
   virtual double value(const vector<double>&);
-//private: // TODO should be private
+  ThinPlateSpline getThinPlateSpline(const MatrixXd& z_vals);
+
+  //private: // TODO should be private
   VarArray tps_vars_;
   MatrixX3d x_na_;
   MatrixX3d y_ng_;
@@ -69,6 +71,7 @@ struct TpsCostPlotter : public Plotter {
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 
+#if 0
 struct TpsCorrErrCalculator : public VectorOfVector {
 public:
   TpsCorrErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, double alpha);
@@ -78,6 +81,7 @@ public:
   MatrixXd y_ng_;
   double alpha_;
 };
+#endif
 
 struct TpsCartPoseErrCalculator : public VectorOfVector {
   MatrixXd x_na_;
@@ -98,6 +102,39 @@ struct TpsCartPoseErrorPlotter : public Plotter {
   boost::shared_ptr<void> m_calc; //actually points to a TpsCartPoseErrCalculator
   VarVector m_vars;
   TpsCartPoseErrorPlotter(boost::shared_ptr<void> calc, const VarVector& vars) : m_calc(calc), m_vars(vars) {}
+  void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
+};
+
+struct TpsRelPtsErrCalculator : public VectorOfVector {
+  boost::shared_ptr<TpsCost> tps_cost_;
+  MatrixX3d src_xyzs_;
+  MatrixX3d rel_xyzs_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  TpsRelPtsErrCalculator(boost::shared_ptr<TpsCost> tps_cost, const MatrixX3d& src_xyzs, const MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+    tps_cost_(tps_cost),
+    src_xyzs_(src_xyzs),
+    rel_xyzs_(rel_xyzs),
+    manip_(manip),
+    link_(link) {}
+  VectorXd operator()(const VectorXd& dof_z_vals) const;
+};
+
+struct TpsRelPtsErrJacCalculator : MatrixOfVector {
+  boost::shared_ptr<TpsRelPtsErrCalculator> m_calc;
+  MatrixX3d src_xyzs_;
+  MatrixX3d rel_xyzs_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  MatrixXd tps_jac_;
+  TpsRelPtsErrJacCalculator(VectorOfVectorPtr calc, const MatrixX3d& src_xyzs, const MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
+  MatrixXd operator()(const VectorXd& dof_vals) const;
+};
+
+struct TpsRelPtsErrorPlotter : public Plotter {
+  boost::shared_ptr<TpsRelPtsErrCalculator> m_calc;
+  VarVector m_vars;
+  TpsRelPtsErrorPlotter(VectorOfVectorPtr calc, const VarVector& vars) : m_calc(boost::dynamic_pointer_cast<TpsRelPtsErrCalculator>(calc)), m_vars(vars) {}
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 

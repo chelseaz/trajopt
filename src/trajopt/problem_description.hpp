@@ -320,4 +320,16 @@ struct TpsPoseCostInfo : public TermInfo, public MakesCost, public MakesConstrai
   DEFINE_CREATE(TpsPoseCostInfo);
 };
 
+struct TpsRelPtsCostInfo : public TermInfo, public MakesCost {
+  string tps_cost_name;
+  int timestep;
+  MatrixXd src_xyzs;
+  MatrixXd rel_xyzs;
+  VectorXd pos_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(TpsRelPtsCostInfo);
+};
+
 }

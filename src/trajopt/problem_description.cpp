@@ -53,6 +53,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create);
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
+  TermInfo::RegisterMaker("tps_rel_pts", &TpsRelPtsCostInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
@@ -794,6 +795,61 @@ void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
   prob.addCost(CostPtr(new CostFromErrFunc(f, dof_tps_vars, concat(rot_coeffs, pos_coeffs), ABS, name)));
 
   prob.GetPlotter()->Add(PlotterPtr(new TpsCartPoseErrorPlotter(f, dof_tps_vars)));
+  prob.GetPlotter()->AddLink(link);
+}
+
+void TpsRelPtsCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, tps_cost_name, "tps_cost_name");
+  childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+
+  FAIL_IF_FALSE(params.isMember("src_xyzs"));
+  Json::fromJson(params["src_xyzs"], src_xyzs);
+
+  FAIL_IF_FALSE(params.isMember("rel_xyzs"));
+  Json::fromJson(params["rel_xyzs"], rel_xyzs);
+
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(3*src_xyzs.size()));
+
+  if (src_xyzs.size() != rel_xyzs.size()) {
+    PRINT_AND_THROW(boost::format("size of src_xyzs %d should be the same as size of rel_xyzs %d")%src_xyzs.size()%rel_xyzs.size());
+  }
+
+  string linkstr;
+  childFromJson(params, linkstr, "link");
+  link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+  if (!link) {
+    PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+  }
+
+  const char* all_fields[] = {"tps_cost_name", "timestep", "src_xyzs", "rel_xyzs", "pos_coeffs", "link"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+
+}
+
+void TpsRelPtsCostInfo::hatch(TrajOptProb& prob) {
+  boost::shared_ptr<TpsCost> tps_cost;
+  BOOST_FOREACH(const CostPtr& cost, prob.getCosts()) {
+    if (cost->name() == tps_cost_name) {
+      tps_cost = boost::dynamic_pointer_cast<TpsCost>(cost);
+    }
+  }
+  if (!tps_cost) {
+    PRINT_AND_THROW(boost::format("tps_cost with name %s doesn't not exist")%tps_cost_name);
+  }
+
+  VarArray tps_vars = prob.GetExtVars();
+  VarVector tps_vars_flatten;
+  for (int j = 0; j < tps_vars.cols(); j++) {
+    tps_vars_flatten = concat(tps_vars_flatten, tps_vars.col(j));
+  }
+  VarVector dof_tps_vars = concat(prob.GetVarRow(timestep), tps_vars_flatten);
+  VectorOfVectorPtr f(new TpsRelPtsErrCalculator(tps_cost, src_xyzs, rel_xyzs, prob.GetRAD(), link));
+  MatrixOfVectorPtr dfdx(new TpsRelPtsErrJacCalculator(f, src_xyzs, rel_xyzs, prob.GetRAD(), link));
+  prob.addCost(CostPtr(new CostFromErrFunc(f, dfdx, dof_tps_vars, pos_coeffs, SQUARED, name)));
+
+  prob.GetPlotter()->Add(PlotterPtr(new TpsRelPtsErrorPlotter(f, dof_tps_vars)));
   prob.GetPlotter()->AddLink(link);
 }
 

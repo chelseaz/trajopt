@@ -4,6 +4,7 @@
 #include <sstream>
 #include "sco/expr_ops.hpp"
 #include "sco/modeling_utils.hpp"
+#include "sco/num_diff.hpp"
 #include "trajopt/tps_costs.hpp"
 #include "trajopt/rave_utils.hpp"
 #include "utils/eigen_conversions.hpp"
@@ -37,6 +38,8 @@ inline Vector3d rotVec(const OpenRAVE::Vector& q) {
 }
 
 namespace trajopt {
+
+const double DEFAULT_EPSILON = 1e-5;
 
 void python_check_transform_hmats(ThinPlateSpline& f, const OR::Transform& src_pose, const OR::Transform& warped_src_pose) {
   // python code to verify transform_hmats
@@ -435,13 +438,18 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixX3d& x_na, const MatrixX3
 
     MatrixXd NHN = N_.transpose()*H*N_;
 
+    double coef;
     for (int i = 0; i < NHN.rows(); i++) {
       for (int j = i; j < NHN.cols(); j++) {
         if (i == j) {
-          exprTrzNHNz.coeffs.push_back(NHN(i,j));
+          coef = NHN(i,j);
         } else {
-          exprTrzNHNz.coeffs.push_back(NHN(i,j)+NHN(j,i));
+          coef = NHN(i,j)+NHN(j,i);
         }
+        if (coef == 0.0) {
+          continue;
+        }
+        exprTrzNHNz.coeffs.push_back(coef);
         exprTrzNHNz.vars1.push_back(tps_vars_(i,d));
         exprTrzNHNz.vars2.push_back(tps_vars_(j,d));
       }
@@ -451,7 +459,11 @@ TpsCost::TpsCost(const VarArray& tps_vars, const MatrixX3d& x_na, const MatrixX3
     VectorXd fN = f.transpose() * N_;
 
     for (int j = 0; j < fN.size(); j++) {
-      expr2TrfNz.coeffs.push_back(2.0*fN(j));
+      coef = 2.0*fN(j);
+      if (coef == 0.0) {
+        continue;
+      }
+      expr2TrfNz.coeffs.push_back(coef);
       expr2TrfNz.vars.push_back(tps_vars_(j,d));
     }
     fNs.push_back(fN);
@@ -512,6 +524,23 @@ ConvexObjectivePtr TpsCost::convex(const vector<double>& x, Model* model) {
   ConvexObjectivePtr out(new ConvexObjective(model));
   out->addQuadExpr(expr_);
   return out;
+}
+
+ThinPlateSpline TpsCost::getThinPlateSpline(const MatrixXd& z_vals) {
+  int n = x_na_.rows();
+  int dim = x_na_.cols();
+  assert(dim == 3);
+
+  MatrixX3d z(n,dim);
+  if (z_vals.cols() == 1) {
+    z  << z_vals.middleRows(0,n), z_vals.middleRows(n,n), z_vals.middleRows(2*n,n);
+  } else {
+    z = z_vals;
+  }
+
+  MatrixX3d theta = N_ * z;
+  ThinPlateSpline f(theta, x_na_);
+  return f;
 }
 
 void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles) {
@@ -600,6 +629,7 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   }
 }
 
+#if 0
 TpsCorrErrCalculator::TpsCorrErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, double alpha) :
   x_na_(x_na),
   N_(N),
@@ -617,6 +647,7 @@ VectorXd TpsCorrErrCalculator::operator()(const VectorXd& theta_vals) const {
   cout << "err " << err << endl;
   return err;
 }
+#endif
 
 TpsCartPoseErrCalculator::TpsCartPoseErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const OR::Transform& src_pose, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
   x_na_(x_na),
@@ -670,6 +701,112 @@ void TpsCartPoseErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, st
   MatrixXd f_x_na = f.transform_points(x_na);
   PlotPointCloud(env, x_na, 5, handles, OR::Vector(1,0,0,1));
   PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,1,0,1));
+}
+
+VectorXd TpsRelPtsErrCalculator::operator()(const VectorXd& dof_z_vals) const {
+  int n_dof = manip_->GetDOF();
+  VectorXd dof_vals = dof_z_vals.topRows(n_dof);
+  VectorXd z_vals = dof_z_vals.bottomRows(dof_z_vals.size() - n_dof);
+
+  manip_->SetDOFValues(toDblVec(dof_vals));
+  OR::Transform cur_pose = link_->GetTransform();
+  Matrix3d cur_rot = toRot(cur_pose.rot);
+  Vector3d cur_trans = toVector3d(cur_pose.trans);
+
+  ThinPlateSpline f = tps_cost_->getThinPlateSpline(z_vals);
+  MatrixX3d warped_src_xyzs = f.transform_points(src_xyzs_);
+
+  MatrixXd err = (warped_src_xyzs - (cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose()));
+  VectorXd err_flatten(err.size());
+  err_flatten << err.col(0), err.col(1), err.col(2);
+  return err_flatten;
+}
+
+struct TransCalculator : VectorOfVector {
+  ConfigurationPtr manip_;
+  KinBody::LinkPtr link_;
+  TransCalculator(ConfigurationPtr manip, KinBody::LinkPtr link) :
+    manip_(manip), link_(link) {}
+
+  VectorXd operator()(const VectorXd& dof_vals) const {
+    manip_->SetDOFValues(toDblVec(dof_vals));
+    OR::Transform pose = link_->GetTransform();
+    return toVector3d(pose.trans);
+  }
+};
+
+struct RotTCalculator : VectorOfVector {
+  ConfigurationPtr manip_;
+  KinBody::LinkPtr link_;
+  RotTCalculator(ConfigurationPtr manip, KinBody::LinkPtr link) :
+    manip_(manip), link_(link) {}
+
+  VectorXd operator()(const VectorXd& dof_vals) const {
+    manip_->SetDOFValues(toDblVec(dof_vals));
+    OR::Transform pose = link_->GetTransform();
+    Matrix3d rot = toRot(pose.rot);
+    VectorXd rot_T_flatten(rot.size());
+    rot_T_flatten << rot.row(0).transpose(), rot.row(1).transpose(), rot.row(2).transpose();
+    return rot_T_flatten;
+  }
+};
+
+TpsRelPtsErrJacCalculator::TpsRelPtsErrJacCalculator(VectorOfVectorPtr calc, const MatrixX3d& src_xyzs, const MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+  m_calc(boost::dynamic_pointer_cast<TpsRelPtsErrCalculator>(calc)),
+  src_xyzs_(src_xyzs),
+  rel_xyzs_(rel_xyzs),
+  manip_(manip),
+  link_(link)
+{
+  MatrixX3d& x_na = m_calc->tps_cost_->x_na_;
+  MatrixXd& N = m_calc->tps_cost_->N_;
+  MatrixXd Q(src_xyzs.rows(), 1 + 3 + x_na.rows());
+  Q << MatrixXd::Ones(src_xyzs.rows(),1), src_xyzs, tps_kernel_matrix2(src_xyzs, x_na);
+  MatrixXd QN = Q * N;
+  tps_jac_ = MatrixXd::Zero(3*QN.rows(), 3*QN.cols());
+  tps_jac_.block(          0,           0, QN.rows(), QN.cols()) = QN;
+  tps_jac_.block(  QN.rows(),   QN.cols(), QN.rows(), QN.cols()) = QN;
+  tps_jac_.block(2*QN.rows(), 2*QN.cols(), QN.rows(), QN.cols()) = QN;
+}
+
+MatrixXd TpsRelPtsErrJacCalculator::operator()(const VectorXd& dof_z_vals) const {
+  int n_dof = manip_->GetDOF();
+  VectorXd dof_vals = dof_z_vals.topRows(n_dof);
+  VectorXd z_vals = dof_z_vals.bottomRows(dof_z_vals.size() - n_dof);
+
+  TransCalculator trans_calc(manip_, link_);
+  RotTCalculator rot_T_calc(manip_, link_);
+  MatrixXd trans_jac = calcForwardNumJac(trans_calc, dof_vals, DEFAULT_EPSILON);
+  MatrixXd rot_T_jac = calcForwardNumJac(rot_T_calc, dof_vals, DEFAULT_EPSILON);
+
+  MatrixXd tf_jac(3 * rel_xyzs_.rows(), trans_jac.cols());
+  tf_jac << trans_jac.row(0).replicate(rel_xyzs_.rows(), 1) + rel_xyzs_ * rot_T_jac.middleRows(0,3),
+      trans_jac.row(1).replicate(rel_xyzs_.rows(), 1) + rel_xyzs_ * rot_T_jac.middleRows(3,3),
+      trans_jac.row(2).replicate(rel_xyzs_.rows(), 1) + rel_xyzs_ * rot_T_jac.middleRows(6,3);
+
+  MatrixXd jac_err(tf_jac.rows(), tf_jac.cols() + tps_jac_.cols());
+  jac_err << -tf_jac, tps_jac_;
+
+//  MatrixXd jac = calcForwardNumJac(*m_calc, dof_z_vals, DEFAULT_EPSILON);
+//  cout << "norm " << (jac - jac_err).norm() << endl;
+  return jac_err;
+}
+
+void TpsRelPtsErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles) {
+  int n_dof = m_calc->manip_->GetDOF();
+  VectorXd dof_z_vals = toVectorXd(getDblVec(x, m_vars));
+  VectorXd dof_vals = dof_z_vals.topRows(n_dof);
+  VectorXd z_vals = dof_z_vals.bottomRows(dof_z_vals.size() - n_dof);
+
+  m_calc->manip_->SetDOFValues(toDblVec(dof_vals));
+  OR::Transform cur_pose = m_calc->link_->GetTransform();
+
+  ThinPlateSpline f = m_calc->tps_cost_->getThinPlateSpline(z_vals);
+  MatrixX3d warped_src_xyzs = f.transform_points(m_calc->src_xyzs_);
+
+  for (int i = 0; i < warped_src_xyzs.rows(); i++) {
+     handles.push_back(env.drawarrow(cur_pose * toRaveVec(m_calc->rel_xyzs_.row(i)), toRaveVec(warped_src_xyzs.row(i)), .001, OR::Vector(1,0,1,1)));
+  }
 }
 
 }
