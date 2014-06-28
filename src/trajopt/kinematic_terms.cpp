@@ -70,13 +70,14 @@ VectorXd CartPoseErrCalculator::operator()(const VectorXd& dof_vals) const {
 
 VectorXd RelPtsErrCalculator::operator()(const VectorXd& dof_vals) const {
   manip_->SetDOFValues(toDblVec(dof_vals));
-  OR::Transform newpose = link_->GetTransform();
+  OR::Transform cur_pose = link_->GetTransform();
+  Matrix3d cur_rot = toRot(cur_pose.rot);
+  Vector3d cur_trans = toVector3d(cur_pose.trans);
 
-  VectorXd err(xyzs_.size());
-  for (int i = 0; i < xyzs_.size(); i++) {
-     err(i) = sqrt((xyzs_[i] - newpose * rel_xyzs_[i]).lengthsqr3());
-  }
-  return err;
+  MatrixXd err = (xyzs_ - (cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose()));
+  VectorXd err_flatten(err.size());
+  err_flatten << err.col(0), err.col(1), err.col(2);
+  return err_flatten;
 }
 
 
@@ -104,9 +105,9 @@ void RelPtsErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::ve
   RelPtsErrCalculator* calc = static_cast<RelPtsErrCalculator*>(m_calc.get());
   DblVec dof_vals = getDblVec(x, m_vars);
   calc->manip_->SetDOFValues(dof_vals);
-  OR::Transform cur = calc->link_->GetTransform();
-  for (int i = 0; i < calc->xyzs_.size(); i++) {
-     handles.push_back(env.drawarrow(cur * calc->rel_xyzs_[i], calc->xyzs_[i], .005, OR::Vector(1,0,1,1)));
+  OR::Transform cur_pose = calc->link_->GetTransform();
+  for (int i = 0; i < calc->xyzs_.rows(); i++) {
+     handles.push_back(env.drawarrow(cur_pose * toRaveVec(calc->rel_xyzs_.row(i)), toRaveVec(calc->xyzs_.row(i)), .001, OR::Vector(1,0,1,1)));
   }
 }
 

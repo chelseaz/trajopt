@@ -629,6 +629,41 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
   }
 }
 
+VectorXd TpsPtsErrCalculator::operator()(const VectorXd& z_vals) const {
+  ThinPlateSpline f = tps_cost_->getThinPlateSpline(z_vals);
+  MatrixX3d warped_src_xyzs = f.transform_points(src_xyzs_);
+
+  MatrixXd err = warped_src_xyzs - targ_xyzs_;
+  VectorXd err_flatten(err.size());
+  err_flatten << err.col(0), err.col(1), err.col(2);
+
+  VectorXd abs_err(2*err_flatten.size());
+  abs_err.topRows(err_flatten.size()) = err_flatten - max_abs_err_.replicate(3,1);
+  abs_err.bottomRows(err_flatten.size()) = -err_flatten - max_abs_err_.replicate(3,1);
+  return abs_err;
+}
+
+TpsPtsErrJacCalculator::TpsPtsErrJacCalculator(VectorOfVectorPtr calc, const MatrixX3d& src_xyzs) :
+  m_calc(boost::dynamic_pointer_cast<TpsPtsErrCalculator>(calc)),
+  src_xyzs_(src_xyzs)
+{
+  MatrixX3d& x_na = m_calc->tps_cost_->x_na_;
+  MatrixXd& N = m_calc->tps_cost_->N_;
+  MatrixXd Q(src_xyzs.rows(), 1 + 3 + x_na.rows());
+  Q << MatrixXd::Ones(src_xyzs.rows(),1), src_xyzs, tps_kernel_matrix2(src_xyzs, x_na);
+  MatrixXd QN = Q * N;
+  MatrixXd err_jac = MatrixXd::Zero(3*QN.rows(), 3*QN.cols());
+  err_jac.block(          0,           0, QN.rows(), QN.cols()) = QN;
+  err_jac.block(  QN.rows(),   QN.cols(), QN.rows(), QN.cols()) = QN;
+  err_jac.block(2*QN.rows(), 2*QN.cols(), QN.rows(), QN.cols()) = QN;
+  jac_.resize(2*err_jac.rows(), err_jac.cols());
+  jac_ << err_jac, -err_jac;
+}
+
+MatrixXd TpsPtsErrJacCalculator::operator()(const VectorXd& z_vals) const {
+  return jac_;
+}
+
 #if 0
 TpsCorrErrCalculator::TpsCorrErrCalculator(const MatrixXd& x_na, const MatrixXd& N, const MatrixXd& y_ng, double alpha) :
   x_na_(x_na),
@@ -807,6 +842,19 @@ void TpsRelPtsErrorPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std:
   for (int i = 0; i < warped_src_xyzs.rows(); i++) {
      handles.push_back(env.drawarrow(cur_pose * toRaveVec(m_calc->rel_xyzs_.row(i)), toRaveVec(warped_src_xyzs.row(i)), .001, OR::Vector(1,0,1,1)));
   }
+}
+
+VectorXd TpsJacOrthErrCalculator::operator()(const VectorXd& z_vals) const {
+  ThinPlateSpline f = tps_cost_->getThinPlateSpline(z_vals);
+  vector<Matrix3d> f_jacs = f.compute_jacobian(pts_);
+
+  VectorXd err(9 * f_jacs.size());
+  for (int i = 0; i < f_jacs.size(); i++) {
+    Matrix3d& jac = f_jacs[i];
+    Matrix3d jac_err = jac * jac.transpose() - Matrix3d::Identity();
+    err.middleRows(9*i,9) = Map<VectorXd>(jac_err.data(), jac_err.size());
+  }
+  return err;
 }
 
 }

@@ -54,10 +54,12 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
   TermInfo::RegisterMaker("tps_rel_pts", &TpsRelPtsCostInfo::create);
+  TermInfo::RegisterMaker("tps_jac_orth", &TpsJacOrthCostInfo::create);
 
   TermInfo::RegisterMaker("joint", &JointConstraintInfo::create);
   TermInfo::RegisterMaker("cart_vel", &CartVelCntInfo::create);
   TermInfo::RegisterMaker("joint_vel_limits", &JointVelConstraintInfo::create);
+  TermInfo::RegisterMaker("tps_pts", &TpsPtsConstraintInfo::create);
 
   gRegisteredMakers = true;
 }
@@ -445,14 +447,7 @@ struct l2NormErrCalculator : public VectorOfVector {
 void PoseCostInfo::hatch(TrajOptProb& prob) {
   VectorOfVectorPtr f(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
   if (term_type == TT_COST) {
-    VectorOfVectorPtr f_pos(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
-    VectorOfVectorPtr f_pos_norm(new l2NormErrCalculator(f_pos, concat(Vector3d::Zero(), pos_coeffs)));
-    VectorOfVectorPtr f_rot(new CartPoseErrCalculator(toRaveTransform(wxyz, xyz), prob.GetRAD(), link));
-    VectorOfVectorPtr f_rot_norm(new l2NormErrCalculator(f_rot, concat(rot_coeffs, Vector3d::Zero())));
-    VectorOfVectorPtr f_pos_sqrt_norm(new SqrtErrCalculator(f_pos_norm));
-    VectorOfVectorPtr f_rot_sqrt_norm(new SqrtErrCalculator(f_rot_norm));
-    prob.addCost(CostPtr(new CostFromErrFunc(f_pos_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
-    prob.addCost(CostPtr(new CostFromErrFunc(f_rot_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
+    prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), concat(rot_coeffs, pos_coeffs), SQUARED, name)));
   }
   else if (term_type == TT_CNT) {
     prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, prob.GetVarRow(timestep), concat(rot_coeffs, pos_coeffs), EQ, name)));
@@ -667,12 +662,27 @@ void RelPtsCostInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
   childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
-  childFromJson(params, xyzs, "xyzs");
-  childFromJson(params, rel_xyzs, "rel_xyzs");
-  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(xyzs.size()));
 
-  if (xyzs.size() != rel_xyzs.size()) {
-    PRINT_AND_THROW(boost::format("size of xyzs %d should be the same as size of rel_xyzs %d")%xyzs.size()%rel_xyzs.size());
+  FAIL_IF_FALSE(params.isMember("xyzs"));
+  Json::fromJson(params["xyzs"], xyzs);
+
+  FAIL_IF_FALSE(params.isMember("rel_xyzs"));
+  Json::fromJson(params["rel_xyzs"], rel_xyzs);
+
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(xyzs.rows()));
+
+  if (term_type == TT_CNT) {
+    childFromJson(params, max_abs_err, "max_abs_err");
+    if (max_abs_err.size() != pos_coeffs.size()) {
+      PRINT_AND_THROW(boost::format("size of max_abs_err %d should be the same as size of pos_coeffs %d")%max_abs_err.size()%pos_coeffs.size());
+    }
+  }
+
+  if (xyzs.rows() != rel_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of xyzs %d should be the same as size of rel_xyzs %d")%xyzs.rows()%rel_xyzs.rows());
+  }
+  if (pos_coeffs.size() != xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of pos_coeffs %d should be the same as size of xyzs %d")%pos_coeffs.size()%xyzs.rows());
   }
 
   string linkstr;
@@ -682,33 +692,93 @@ void RelPtsCostInfo::fromJson(const Value& v) {
     PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
   }
 
-  const char* all_fields[] = {"timestep", "xyzs", "rel_xyzs", "pos_coeffs", "link"};
-  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
-
+  if (term_type == TT_COST) {
+    const char* all_fields[] = {"timestep", "xyzs", "rel_xyzs", "pos_coeffs", "link"};
+    ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+  } else if (term_type == TT_CNT) {
+    const char* all_fields[] = {"timestep", "xyzs", "rel_xyzs", "pos_coeffs", "max_abs_err", "link"};
+    ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+  }
 }
 
+struct AbsErrCalculator : public VectorOfVector {
+  VectorOfVectorPtr f_;
+  VectorXd max_abs_err_;
+  AbsErrCalculator(VectorOfVectorPtr f, const VectorXd& max_abs_err) :
+    f_(f), max_abs_err_(max_abs_err) {}
+  VectorXd operator()(const VectorXd& vals) const {
+    VectorXd err = f_->call(vals);
+    VectorXd abs_err(2*err.size());
+    abs_err.topRows(err.size()) = err - max_abs_err_;
+    abs_err.bottomRows(err.size()) = -err - max_abs_err_;
+    cout << "=======================================================================================" << endl;
+    cout << "abs_err " << abs_err.transpose() << endl;
+    return abs_err;
+  }
+};
+
 void RelPtsCostInfo::hatch(TrajOptProb& prob) {
-  vector<OR::Vector> rave_xyzs(xyzs.size());
-  vector<OR::Vector> rave_rel_xyzs(rel_xyzs.size());
-  for (int i = 0; i < xyzs.size(); i++) {
-    for (int j = 0; j < 3; j++) {
-      rave_xyzs[i][j] = xyzs[i](j);
-      rave_rel_xyzs[i][j] = rel_xyzs[i](j);
-    }
-  }
-  VectorOfVectorPtr f(new RelPtsErrCalculator(rave_xyzs, rave_rel_xyzs, prob.GetRAD(), link));
+  VectorOfVectorPtr f(new RelPtsErrCalculator(xyzs, rel_xyzs, prob.GetRAD(), link));
   if (term_type == TT_COST) {
-    VectorOfVectorPtr f_norm(new l2NormErrCalculator(f, pos_coeffs));
-    VectorOfVectorPtr f_sqrt_norm(new SqrtErrCalculator(f_norm));
-    prob.addCost(CostPtr(new CostFromErrFunc(f_sqrt_norm, prob.GetVarRow(timestep), VectorXd::Ones(1), SQUARED, name)));
-  }
-  else if (term_type == TT_CNT) {
-    prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, prob.GetVarRow(timestep), pos_coeffs, EQ, name)));
+    prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), pos_coeffs.replicate(3,1), SQUARED, name)));
+  } else if (term_type == TT_CNT) {
+    VectorOfVectorPtr f_abs(new AbsErrCalculator(f, max_abs_err.replicate(3,1)));
+    prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f_abs, prob.GetVarRow(timestep), pos_coeffs.replicate(6,1), INEQ, name)));
   }
 
   prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
   prob.GetPlotter()->AddLink(link);
+}
 
+
+void TpsPtsConstraintInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, tps_cost_name, "tps_cost_name");
+
+  FAIL_IF_FALSE(params.isMember("src_xyzs"));
+  Json::fromJson(params["src_xyzs"], src_xyzs);
+
+  FAIL_IF_FALSE(params.isMember("targ_xyzs"));
+  Json::fromJson(params["targ_xyzs"], targ_xyzs);
+
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(src_xyzs.rows()));
+
+  childFromJson(params, max_abs_err, "max_abs_err");
+
+  if (src_xyzs.rows() != targ_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of src_xyzs %d should be the same as size of targ_xyzs %d")%src_xyzs.rows()%targ_xyzs.rows());
+  }
+  if (pos_coeffs.size() != src_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of pos_coeffs %d should be the same as size of src_xyzs %d")%pos_coeffs.size()%src_xyzs.rows());
+  }
+  if (max_abs_err.size() != pos_coeffs.size()) {
+    PRINT_AND_THROW(boost::format("size of max_abs_err %d should be the same as size of pos_coeffs %d")%max_abs_err.size()%pos_coeffs.size());
+  }
+
+  const char* all_fields[] = {"tps_cost_name", "src_xyzs", "targ_xyzs", "pos_coeffs", "max_abs_err"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
+void TpsPtsConstraintInfo::hatch(TrajOptProb& prob) {
+  boost::shared_ptr<TpsCost> tps_cost;
+  BOOST_FOREACH(const CostPtr& cost, prob.getCosts()) {
+    if (cost->name() == tps_cost_name) {
+      tps_cost = boost::dynamic_pointer_cast<TpsCost>(cost);
+    }
+  }
+  if (!tps_cost) {
+    PRINT_AND_THROW(boost::format("tps_cost with name %s doesn't not exist")%tps_cost_name);
+  }
+
+  VarArray tps_vars = prob.GetExtVars();
+  VarVector tps_vars_flatten;
+  for (int j = 0; j < tps_vars.cols(); j++) {
+    tps_vars_flatten = concat(tps_vars_flatten, tps_vars.col(j));
+  }
+  VectorOfVectorPtr f(new TpsPtsErrCalculator(tps_cost, src_xyzs, targ_xyzs, max_abs_err));
+  MatrixOfVectorPtr dfdx(new TpsPtsErrJacCalculator(f, src_xyzs));
+  prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, dfdx, tps_vars_flatten, pos_coeffs.replicate(6,1), INEQ, name)));
 }
 
 
@@ -760,6 +830,7 @@ void TpsCostConstraintInfo::hatch(TrajOptProb& prob) {
   prob.GetPlotter()->Add(PlotterPtr(new TpsCostPlotter(tps_cost)));
 }
 
+
 void TpsPoseCostInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
@@ -798,6 +869,7 @@ void TpsPoseCostInfo::hatch(TrajOptProb& prob) {
   prob.GetPlotter()->AddLink(link);
 }
 
+
 void TpsRelPtsCostInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(v.isMember("params"));
   const Value& params = v["params"];
@@ -810,10 +882,13 @@ void TpsRelPtsCostInfo::fromJson(const Value& v) {
   FAIL_IF_FALSE(params.isMember("rel_xyzs"));
   Json::fromJson(params["rel_xyzs"], rel_xyzs);
 
-  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(3*src_xyzs.size()));
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(src_xyzs.rows()));
 
-  if (src_xyzs.size() != rel_xyzs.size()) {
-    PRINT_AND_THROW(boost::format("size of src_xyzs %d should be the same as size of rel_xyzs %d")%src_xyzs.size()%rel_xyzs.size());
+  if (src_xyzs.rows() != rel_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of src_xyzs %d should be the same as size of rel_xyzs %d")%src_xyzs.rows()%rel_xyzs.rows());
+  }
+  if (pos_coeffs.size() != src_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of pos_coeffs %d should be the same as size of src_xyzs %d")%pos_coeffs.size()%src_xyzs.rows());
   }
 
   string linkstr;
@@ -825,7 +900,6 @@ void TpsRelPtsCostInfo::fromJson(const Value& v) {
 
   const char* all_fields[] = {"tps_cost_name", "timestep", "src_xyzs", "rel_xyzs", "pos_coeffs", "link"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
-
 }
 
 void TpsRelPtsCostInfo::hatch(TrajOptProb& prob) {
@@ -847,10 +921,57 @@ void TpsRelPtsCostInfo::hatch(TrajOptProb& prob) {
   VarVector dof_tps_vars = concat(prob.GetVarRow(timestep), tps_vars_flatten);
   VectorOfVectorPtr f(new TpsRelPtsErrCalculator(tps_cost, src_xyzs, rel_xyzs, prob.GetRAD(), link));
   MatrixOfVectorPtr dfdx(new TpsRelPtsErrJacCalculator(f, src_xyzs, rel_xyzs, prob.GetRAD(), link));
-  prob.addCost(CostPtr(new CostFromErrFunc(f, dfdx, dof_tps_vars, pos_coeffs, SQUARED, name)));
+  if (term_type == TT_COST) {
+    prob.addCost(CostPtr(new CostFromErrFunc(f, dfdx, dof_tps_vars, pos_coeffs.replicate(3,1), SQUARED, name)));
+  } else if (term_type == TT_CNT) {
+    prob.addConstraint(ConstraintPtr(new ConstraintFromFunc(f, dfdx, dof_tps_vars, pos_coeffs.replicate(3,1), EQ, name))); //TODO
+  }
 
   prob.GetPlotter()->Add(PlotterPtr(new TpsRelPtsErrorPlotter(f, dof_tps_vars)));
   prob.GetPlotter()->AddLink(link);
+}
+
+
+void TpsJacOrthCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, tps_cost_name, "tps_cost_name");
+
+  FAIL_IF_FALSE(params.isMember("pts"));
+  Json::fromJson(params["pts"], pts);
+
+  childFromJson(params, coeffs, "coeffs", (VectorXd)VectorXd::Ones(pts.rows()));
+
+  if (pts.rows() != coeffs.size()) {
+    PRINT_AND_THROW(boost::format("size of pts %d should be the same as size of coeffs %d")%pts.rows()%coeffs.size());
+  }
+
+  const char* all_fields[] = {"tps_cost_name", "pts", "coeffs"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
+void TpsJacOrthCostInfo::hatch(TrajOptProb& prob) {
+  boost::shared_ptr<TpsCost> tps_cost;
+  BOOST_FOREACH(const CostPtr& cost, prob.getCosts()) {
+    if (cost->name() == tps_cost_name) {
+      tps_cost = boost::dynamic_pointer_cast<TpsCost>(cost);
+    }
+  }
+  if (!tps_cost) {
+    PRINT_AND_THROW(boost::format("tps_cost with name %s doesn't not exist")%tps_cost_name);
+  }
+
+  VarArray tps_vars = prob.GetExtVars();
+  VarVector tps_vars_flatten;
+  for (int j = 0; j < tps_vars.cols(); j++) {
+    tps_vars_flatten = concat(tps_vars_flatten, tps_vars.col(j));
+  }
+  VectorOfVectorPtr f(new TpsJacOrthErrCalculator(tps_cost, pts));
+  VectorXd coeffs_full(9*coeffs.size());
+  for (int i = 0; i < coeffs.size(); i++) {
+    coeffs_full.middleRows(9*i,9) = VectorXd::Ones(9) * coeffs(i);
+  }
+  prob.addCost(CostPtr(new CostFromErrFunc(f, tps_vars_flatten, coeffs_full, SQUARED, name)));
 }
 
 }

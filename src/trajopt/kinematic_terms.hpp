@@ -40,11 +40,11 @@ struct CartPoseErrCalculator : public VectorOfVector {
 };
 
 struct RelPtsErrCalculator : public VectorOfVector {
-  vector<OR::Vector> xyzs_;
-  vector<OR::Vector> rel_xyzs_;
+  Eigen::MatrixX3d xyzs_;
+  Eigen::MatrixX3d rel_xyzs_;
   ConfigurationPtr manip_;
   OR::KinBody::LinkPtr link_;
-  RelPtsErrCalculator(const vector<OR::Vector>& xyzs, const vector<OR::Vector>& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+  RelPtsErrCalculator(const Eigen::MatrixX3d& xyzs, const Eigen::MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
     xyzs_(xyzs),
     rel_xyzs_(rel_xyzs),
     manip_(manip),

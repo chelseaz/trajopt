@@ -71,6 +71,27 @@ struct TpsCostPlotter : public Plotter {
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
 };
 
+struct TpsPtsErrCalculator : public VectorOfVector {
+  boost::shared_ptr<TpsCost> tps_cost_;
+  MatrixX3d src_xyzs_;
+  MatrixX3d targ_xyzs_;
+  VectorXd max_abs_err_;
+  TpsPtsErrCalculator(boost::shared_ptr<TpsCost> tps_cost, const MatrixX3d& src_xyzs, const MatrixX3d& targ_xyzs, const VectorXd& max_abs_err) :
+    tps_cost_(tps_cost),
+    src_xyzs_(src_xyzs),
+    targ_xyzs_(targ_xyzs),
+    max_abs_err_(max_abs_err) {}
+  VectorXd operator()(const VectorXd& z_vals) const;
+};
+
+struct TpsPtsErrJacCalculator : MatrixOfVector {
+  boost::shared_ptr<TpsPtsErrCalculator> m_calc;
+  MatrixX3d src_xyzs_;
+  MatrixXd jac_;
+  TpsPtsErrJacCalculator(VectorOfVectorPtr calc, const MatrixX3d& src_xyzs);
+  MatrixXd operator()(const VectorXd& z_vals) const;
+};
+
 #if 0
 struct TpsCorrErrCalculator : public VectorOfVector {
 public:
@@ -128,7 +149,7 @@ struct TpsRelPtsErrJacCalculator : MatrixOfVector {
   OR::KinBody::LinkPtr link_;
   MatrixXd tps_jac_;
   TpsRelPtsErrJacCalculator(VectorOfVectorPtr calc, const MatrixX3d& src_xyzs, const MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link);
-  MatrixXd operator()(const VectorXd& dof_vals) const;
+  MatrixXd operator()(const VectorXd& dof_z_vals) const;
 };
 
 struct TpsRelPtsErrorPlotter : public Plotter {
@@ -136,6 +157,15 @@ struct TpsRelPtsErrorPlotter : public Plotter {
   VarVector m_vars;
   TpsRelPtsErrorPlotter(VectorOfVectorPtr calc, const VarVector& vars) : m_calc(boost::dynamic_pointer_cast<TpsRelPtsErrCalculator>(calc)), m_vars(vars) {}
   void Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<OR::GraphHandlePtr>& handles);
+};
+
+struct TpsJacOrthErrCalculator : public VectorOfVector {
+  boost::shared_ptr<TpsCost> tps_cost_;
+  MatrixX3d pts_;
+  TpsJacOrthErrCalculator(boost::shared_ptr<TpsCost> tps_cost, const MatrixX3d& pts) :
+  tps_cost_(tps_cost),
+  pts_(pts) {}
+  VectorXd operator()(const VectorXd& z_vals) const;
 };
 
 }

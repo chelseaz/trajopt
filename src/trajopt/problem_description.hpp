@@ -284,13 +284,25 @@ struct JointConstraintInfo : public TermInfo, public MakesConstraint {
 
 struct RelPtsCostInfo : public TermInfo, public MakesCost, public MakesConstraint {
   int timestep;
-  vector<Vector3d> xyzs;
-  vector<Vector3d> rel_xyzs;
+  MatrixXd xyzs;
+  MatrixXd rel_xyzs;
   VectorXd pos_coeffs;
+  VectorXd max_abs_err; // only for constraint
   KinBody::LinkPtr link;
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(RelPtsCostInfo);
+};
+
+struct TpsPtsConstraintInfo : public TermInfo, public MakesConstraint {
+  string tps_cost_name;
+  MatrixXd src_xyzs;
+  MatrixXd targ_xyzs;
+  VectorXd pos_coeffs;
+  VectorXd max_abs_err;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(TpsPtsConstraintInfo);
 };
 
 struct TpsCostConstraintInfo : public TermInfo, public MakesCost {
@@ -330,6 +342,15 @@ struct TpsRelPtsCostInfo : public TermInfo, public MakesCost {
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(TpsRelPtsCostInfo);
+};
+
+struct TpsJacOrthCostInfo : public TermInfo, public MakesCost {
+  string tps_cost_name;
+  MatrixXd pts;
+  VectorXd coeffs;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(TpsJacOrthCostInfo);
 };
 
 }
