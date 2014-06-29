@@ -14,7 +14,8 @@ if (APPLE)
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -Wno-deprecated")
-
+# vtkQuadricDecimation2 doesn't compile with the newer g++. maybe there is another way to fix it
+set(CMAKE_CXX_COMPILER g++-4.5)
 
 # add_custom_command(
 #   COMMAND "./gen_instantiations.py" 

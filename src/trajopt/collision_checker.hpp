@@ -32,6 +32,8 @@ TRAJOPT_API std::ostream& operator<<(std::ostream&, const Collision&);
 enum CollisionFilterGroups {
   RobotFilter = 1,
   KinBodyFilter = 2,
+  LeftRobotFilter = 4,
+  RightRobotFilter = 8,
 };
 
 /** 

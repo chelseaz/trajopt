@@ -5,6 +5,7 @@
 #include <openrave-core.h>
 #include "utils/eigen_conversions.hpp"
 #include <boost/foreach.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <vector>
 #include <iostream>
 #include <LinearMath/btConvexHull.h>
@@ -529,6 +530,7 @@ void BulletCollisionChecker::LinkVsAll_NoUpdate(const KinBody::Link& link, vecto
   if (link.GetGeometries().empty()) return;
   CollisionObjectWrapper* cow = GetCow(&link);
   CollisionCollector cc(collisions, cow, this);
+  cc.m_collisionFilterGroup = cow->getBroadphaseHandle()->m_collisionFilterGroup;
   cc.m_collisionFilterMask = filterMask;
   m_world->contactTest(cow, cc);
 }
@@ -546,6 +548,7 @@ void BulletCollisionChecker::AddKinBody(const OR::KinBodyPtr& body) {
   CDPtr cd(new KinBodyCollisionData(body));
 
   int filterGroup = body->IsRobot() ? RobotFilter : KinBodyFilter;
+  int filterMask = btBroadphaseProxy::AllFilter;
   const vector<OR::KinBody::LinkPtr> links = body->GetLinks();
 
   trajopt::SetUserData(*body, "bt", cd);
@@ -553,10 +556,22 @@ void BulletCollisionChecker::AddKinBody(const OR::KinBodyPtr& body) {
   bool useTrimesh = trajopt::GetUserData(*body, "bt_use_trimesh");
   BOOST_FOREACH(const OR::KinBody::LinkPtr& link, links) {
     if (link->GetGeometries().size() > 0) {
+      if (body->IsRobot()) {
+        if (boost::starts_with(link->GetName(), "l_")) {
+          filterGroup = LeftRobotFilter;
+          filterMask = KinBodyFilter | RightRobotFilter;
+        } else if (boost::starts_with(link->GetName(), "r_")) {
+          filterGroup = RightRobotFilter;
+          filterMask = KinBodyFilter | LeftRobotFilter;
+        } else{
+          filterGroup = RobotFilter;
+          filterMask = KinBodyFilter;
+        }
+      }
       COWPtr new_cow = CollisionObjectFromLink(link, useTrimesh); 
       if (new_cow) {
         SetCow(link.get(), new_cow.get());
-        m_world->addCollisionObject(new_cow.get(), filterGroup);
+        m_world->addCollisionObject(new_cow.get(), filterGroup, filterMask);
         new_cow->setContactProcessingThreshold(m_contactDistance);
         LOG_DEBUG("added collision object for  link %s", link->GetName().c_str());
         cd->links.push_back(link.get());
@@ -990,8 +1005,14 @@ void BulletCollisionChecker::CheckShapeCast(btCollisionShape* shape, const btTra
     obj->setWorldTransform(tf0);
     obj->m_index = cow->m_index;
     CastCollisionCollector cc(collisions, obj, this);
-    cc.m_collisionFilterMask = KinBodyFilter;
-    // cc.m_collisionFilterGroup = cow->m_collisionFilterGroup;
+    cc.m_collisionFilterGroup = cow->getBroadphaseHandle()->m_collisionFilterGroup;
+    cc.m_collisionFilterMask = cow->getBroadphaseHandle()->m_collisionFilterMask;
+//    cc.m_collisionFilterMask = KinBodyFilter;
+//    if (cow->getBroadphaseHandle()->m_collisionFilterGroup == LeftRobotFilter) {
+//      cc.m_collisionFilterMask |= RightRobotFilter;
+//    } else if (cow->getBroadphaseHandle()->m_collisionFilterGroup == RightRobotFilter) {
+//      cc.m_collisionFilterMask |= LeftRobotFilter;
+//    }
     world->contactTest(obj, cc);
     delete obj;
     delete shape;
