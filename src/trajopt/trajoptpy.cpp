@@ -217,6 +217,10 @@ public:
   float GetDistance() {return m_c.distance;}
   string GetLinkAName() {return m_c.linkA->GetName();}
   string GetLinkBName() {return m_c.linkB->GetName();}
+  py::object GetNormalB2A() {
+    double n[] = {m_c.normalB2A.x, m_c.normalB2A.y, m_c.normalB2A.z};
+    return np_mod.attr("array")(toNdarray1<double>(n, 3), "float64");
+  }
 };
 
 py::list toPyList(const vector<Collision>& collisions) {
@@ -327,7 +331,6 @@ public:
     assert(!!m_viewer);
     int x, y, width, height;
     m_viewer->GetWindowProp(x, y, width, height);
-    std::cout << "x " << x << " y " << y << std::endl;
     int prop[] = {x, y, width, height};
     py::object np_prop = np_mod.attr("array")(toNdarray1<int>(prop, 4), "int");
     return np_prop;
@@ -492,6 +495,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("GetDistance", &PyCollision::GetDistance)
      .def("GetLinkAName", &PyCollision::GetLinkAName)
      .def("GetLinkBName", &PyCollision::GetLinkBName)
+     .def("GetNormalB2A", &PyCollision::GetNormalB2A)
     ;
   py::class_< PyGraphHandle >("GraphHandle", py::no_init)
      .def("SetTransparency", &PyGraphHandle::SetTransparency1)
