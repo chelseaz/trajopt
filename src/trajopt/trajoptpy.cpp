@@ -361,6 +361,12 @@ PyOSGViewer PyGetViewer(py::object py_env) {
   ALWAYS_ASSERT(!!viewer);
   return PyOSGViewer(viewer);
 }
+bool PyViewerExists(py::object py_env) {
+  EnvironmentBasePtr env = GetCppEnv(py_env);
+  bool viewer_exists = OSGViewer::ViewerExists(env);
+  return viewer_exists;
+}
+
 
 void ExtractTriMesh(py::object py_mesh, OpenRAVE::TriMesh& mesh) {
   py::object vertices_arr = py_mesh.attr("vertices");
@@ -518,6 +524,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("RemoveKinBody", &PyOSGViewer::RemoveKinBody)
     ;
   py::def("GetViewer", &PyGetViewer, "Get OSG viewer for environment or create a new one");
+  py::def("ViewerExists", &PyViewerExists, "Returns whether OSG viewer for environment exists");
 
   py::def("ConvexDecompHACD", &PyConvexDecompHACD, (py::arg("concavityParam") = 100),  "input: mesh. output: list of meshes. concavityParam: see http://kmamou.blogspot.com/2011/10/hacd-hierarchical-approximate-convex.html");
 

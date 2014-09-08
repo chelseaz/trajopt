@@ -455,6 +455,11 @@ boost::shared_ptr<OSGViewer> OSGViewer::GetOrCreate(OpenRAVE::EnvironmentBasePtr
   return boost::dynamic_pointer_cast<OSGViewer>(viewer);
 }
 
+bool OSGViewer::ViewerExists(OpenRAVE::EnvironmentBasePtr env) {
+  ViewerBasePtr viewer = env->GetViewer("osg");
+  return !!viewer;
+}
+
 
 void throw_runtime_error(const osgGA::GUIEventAdapter&) {
   PRINT_AND_THROW("pressed escape");

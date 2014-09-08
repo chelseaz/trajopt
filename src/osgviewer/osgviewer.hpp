@@ -16,6 +16,7 @@ class TRAJOPT_API OSGViewer : public OpenRAVE::ViewerBase {
 public:
 
   static boost::shared_ptr<OSGViewer> GetOrCreate(OpenRAVE::EnvironmentBasePtr env);
+  static bool ViewerExists(OpenRAVE::EnvironmentBasePtr env);
   OSGViewer(OpenRAVE::EnvironmentBasePtr env);
   ~OSGViewer();
   virtual int main(bool bShow = true);
