@@ -566,6 +566,8 @@ OSGViewer::~OSGViewer(){
 void OSGViewer::UpdateSceneData() {
   vector<OpenRAVE::KinBodyPtr> bodies;
   GetEnv()->GetBodies(bodies);
+  vector<KinBodyGroup*> body_groups;
+  // add the body's group to root if the body is not already in the root
   for (int i=0; i < bodies.size(); ++i) {
     KinBody& body = *bodies[i];
     KinBodyGroup* group = GetOsgGroup(body);
@@ -573,7 +575,18 @@ void OSGViewer::UpdateSceneData() {
       group = CreateOsgGroup(body);
       m_root->addChild(group);
     }
+    body_groups.push_back(group);
     group->update();
+  }
+  // remove body's group from root if the body is no longer in bodies
+  for (int i=0; i < m_root->getNumChildren(); ++i) {
+    Group* group = m_root->getChild(i)->asGroup();
+    if (group) {
+      KinBodyGroup* body_group = dynamic_cast<KinBodyGroup*>(group);
+      if (body_group && std::find(body_groups.begin(), body_groups.end(), body_group) == body_groups.end()) {
+        m_root->removeChild(body_group);
+      }
+    }
   }
   m_viewer.requestRedraw();
 }
