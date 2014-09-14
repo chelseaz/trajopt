@@ -29,6 +29,7 @@ public:
   void GetWindowProp(int& x, int& y, int& width, int& height);
   void SetWindowProp(int x, int y, int width, int height);
   void SaveScreenshot(std::string filename);
+  void SaveNextScreenshot(std::string fname_path, std::string fname_prefix, std::string fname_postfix);
   void UpdateSceneData();
   const std::string& GetName() const {return m_name;}
   void SetBkgndColor(const RaveVectorf &) {printf("warning: SetBkgndColor not implemented\n");}

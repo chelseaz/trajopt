@@ -548,9 +548,10 @@ void TpsCostPlotter::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector
 
   ThinPlateSpline f(theta, m_tps_cost->x_na_);
   MatrixXd f_x_na = f.transform_points(m_tps_cost->x_na_);
-  PlotPointCloud(env, m_tps_cost->x_na_, 5, handles, OR::Vector(1,0,0,1));
-  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,1,0,1));
-  PlotPointCloud(env, m_tps_cost->y_ng_, 5, handles, OR::Vector(0,0,1,1));
+//  PlotPointCloud(env, m_tps_cost->x_na_, 5, handles, OR::Vector(1,0,0,1));
+//  PlotPointCloud(env, f_x_na, 5, handles, OR::Vector(0,1,0,1));
+//  PlotPointCloud(env, m_tps_cost->y_ng_, 5, handles, OR::Vector(0,0,1,1));
+  PlotPointCloud(env, f_x_na, 10, handles, OR::Vector(0,1,1,1));
 
   //TODO put grid drawing in rave_utils by passing a boost function pointer f.transform_points
   Vector3d mins = m_tps_cost->x_na_.colwise().minCoeff();

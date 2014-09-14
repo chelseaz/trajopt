@@ -19,10 +19,14 @@
 #include "openrave_userdata_utils.hpp"
 #include <osgText/Font>
 #include <osgText/Text>
+#include <iterator>
+#include <boost/filesystem.hpp>
+#include <boost/lexical_cast.hpp>
 
 using namespace osg;
 using namespace OpenRAVE;
 using namespace std;
+using namespace boost::filesystem;
 
 namespace {
 
@@ -504,14 +508,19 @@ void OSGViewer::Idle() {
     while (!m_viewer.done() && !m_request_stop_idling) {
       if (m_viewer.checkNeedToDoFrame()) m_viewer.frame();
       usleep(.03*1e6);
+      break; //TODO
     }
     m_idling=false;
+  }
+  for (int i = 0; i < 15; i++) {
+    SaveNextScreenshot("images2", "image", ".png");
   }
 }
 
 void OSGViewer::Draw() {
   UpdateSceneData();
   m_viewer.frame();
+  SaveNextScreenshot("images2", "image", ".png");
 }
 
 osg::Matrixd OSGViewer::GetCameraManipulatorMatrix() {
@@ -545,6 +554,40 @@ void OSGViewer::SaveScreenshot(string filename) {
   captureHandler->captureNextFrame(m_viewer);
   captureHandler->setFramesToCapture(1);
   m_viewer.frame();
+}
+
+void OSGViewer::SaveNextScreenshot(string fname_path, string fname_prefix, string fname_postfix) {
+  path p(fname_path);
+  int next_fname_id = 0;
+  try {
+    if (exists(p)) {
+      if (is_directory(p)) {
+        vector<path> v;
+        copy(directory_iterator(p), directory_iterator(), back_inserter(v));
+        for (vector<path>::const_iterator it (v.begin()); it != v.end(); ++it) {
+          string fname = it->string();
+          if (fname.find(fname_prefix) != std::string::npos && fname.find(fname_postfix) != std::string::npos) {
+            int start_pos = fname.rfind(fname_prefix)+fname_prefix.length();
+            int end_pos = fname.rfind(fname_postfix);
+            std::string str_fname_id = fname.substr(start_pos, end_pos-start_pos);
+            int fname_id = boost::lexical_cast<int>(str_fname_id);
+            next_fname_id = std::max(next_fname_id, fname_id+1);
+          }
+        }
+      } else {
+        cout << p << " is not a directory" << endl;
+      }
+    } else {
+      cout << p << " does not exist\n";
+    }
+  } catch (const filesystem_error& ex) {
+    cout << ex.what() << endl;
+  }
+  std::ostringstream ss;
+  ss << fname_prefix << std::setw(4) << std::setfill('0') << next_fname_id << fname_postfix;
+  string next_fname = ss.str();
+  cout << "Saving screenshot to " << fname_path + "/" + next_fname << endl;
+  SaveScreenshot(fname_path + "/" + next_fname);
 }
 
 void OSGViewer::RemoveKinBody(OpenRAVE::KinBodyPtr body) {
