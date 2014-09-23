@@ -56,6 +56,7 @@ public:
 
   OpenRAVE::GraphHandlePtr PlotAxes(const OpenRAVE::Transform& T, float size);
   OpenRAVE::GraphHandlePtr PlotSphere(const OpenRAVE::Vector& x, float radius);
+  OpenRAVE::GraphHandlePtr PlotEllipsoid(const osg::Matrix& T, const RaveVectorf& color, bool mesh);
 
   /** copy current state of kinbody or link */
   OpenRAVE::GraphHandlePtr PlotKinBody(const OpenRAVE::KinBodyPtr);

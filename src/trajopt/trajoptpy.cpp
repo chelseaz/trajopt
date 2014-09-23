@@ -303,6 +303,21 @@ public:
   PyGraphHandle PlotLink(py::object py_link) {
     return PyGraphHandle(m_viewer->PlotLink(GetCppLink(py_link, m_viewer->GetEnv())));
   }
+  PyGraphHandle PlotEllipsoid(py::object np_T, py::object pycolor, bool mesh) {
+    py::object shape = np_T.attr("shape");
+    assert(py::extract<int>(shape[0]) == 4);
+    assert(py::extract<int>(shape[1]) == 4);
+    double* T_transpose_data = getPointer<double>(np_T);
+    double T_data[16];
+    for (int i = 0; i < 4; i++) {
+      for (int j = 0; j < 4; j++) {
+        T_data[j+4*i] = T_transpose_data[i+4*j];
+      }
+    }
+    osg::Matrixd T(T_data);
+    OpenRAVE::Vector color = OpenRAVE::Vector(py::extract<float>(pycolor[0]), py::extract<float>(pycolor[1]), py::extract<float>(pycolor[2]), py::extract<float>(pycolor[3]));
+    return PyGraphHandle(m_viewer->PlotEllipsoid(T, color, mesh));
+  }
   void SetTransparency(py::object py_kb, float alpha) {
     m_viewer->SetTransparency(GetCppKinBody(py_kb, m_viewer->GetEnv()), alpha);
   }
@@ -512,6 +527,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
      .def("Step", &PyOSGViewer::Step)
      .def("PlotKinBody", &PyOSGViewer::PlotKinBody)
      .def("PlotLink", &PyOSGViewer::PlotLink)
+     .def("PlotEllipsoid", &PyOSGViewer::PlotEllipsoid)
      .def("SetTransparency", &PyOSGViewer::SetTransparency)
      .def("SetAllTransparency", &PyOSGViewer::SetAllTransparency)
      .def("Idle", &PyOSGViewer::Idle)

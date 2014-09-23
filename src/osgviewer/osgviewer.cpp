@@ -19,6 +19,8 @@
 #include "openrave_userdata_utils.hpp"
 #include <osgText/Font>
 #include <osgText/Text>
+#include <osg/CullFace>
+#include <osg/PolygonMode>
 
 using namespace osg;
 using namespace OpenRAVE;
@@ -764,6 +766,36 @@ GraphHandlePtr OSGViewer::PlotSphere(const OpenRAVE::Vector& pt, float radius) {
   geode->addDrawable(sphereDrawable);
   return GraphHandlePtr(new OsgGraphHandle(geode, m_root.get()));
   
+}
+
+OpenRAVE::GraphHandlePtr OSGViewer::PlotEllipsoid(const osg::Matrix& T, const RaveVectorf& color, bool mesh) {
+  osg::Geode *geode = new osg::Geode;
+
+  TessellationHints* hints = new TessellationHints;
+  hints->setDetailRatio(1.0f);
+
+  osg::Sphere* sphere = new osg::Sphere();
+  osg::ShapeDrawable* sphereDrawable = new osg::ShapeDrawable(sphere, hints);
+  geode->addDrawable(sphereDrawable);
+
+  osg::StateSet* ss = geode->getOrCreateStateSet();
+  if (mesh) {
+    sphereDrawable->setColor(toOsgVec4(color));
+    ss->setMode( GL_LIGHTING, osg::StateAttribute::OFF );
+    osg::CullFace* cf = new osg::CullFace;
+    ss->setAttributeAndModes( cf );
+    ss->setAttributeAndModes( new osg::PolygonMode( osg::PolygonMode::FRONT_AND_BACK, osg::PolygonMode::LINE ) );
+  } else {
+    osg::Material* pMaterial = new osg::Material;
+    pMaterial->setDiffuse( osg::Material::FRONT, toOsgVec4(color));
+    ss->setAttribute( pMaterial, osg::StateAttribute::OVERRIDE );
+  }
+
+  osg::MatrixTransform* mt = new osg::MatrixTransform(T);
+
+  mt->addChild(geode);
+
+  return GraphHandlePtr(new OsgGraphHandle(mt, m_root.get()));
 }
 
 OpenRAVE::GraphHandlePtr OSGViewer::drawtrimesh (const float *ppoints, int stride, const int *pIndices, int numTriangles, const RaveVectorf &color) {
