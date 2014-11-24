@@ -35,14 +35,14 @@ def get_postures(manip):
 
 
 
-if args.scenefile == "tabletop": 
+if args.scenefile == "tabletop":
     dof_vals = \
         [ 0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,
         0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.849,
         0.78 ,  1.396, -0.828,  0.688, -1.519,  0.394,  0.   ,  0.   ,
         0.   ,  0.   ,  0.   , -0.658,  0.889, -1.431, -1.073, -0.705,
        -1.107,  2.807,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ]
-    manip = "leftarm"   
+    manip = "leftarm"
 elif args.scenefile == "bookshelves": 
     dof_vals = \
         [ 0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,  0.   ,
