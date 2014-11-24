@@ -304,6 +304,20 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
 }
 
+TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, bool plot) {
+  Configuration::SaverPtr saver = prob->GetRAD()->Save();
+  BasicQP opt(prob);
+  if (plot) {
+    SetupPlotting(*prob, opt);
+  }
+  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
+  DblVec init_ext = trajToDblVec(prob->GetInitExt());
+  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
+  opt.initialize(init_vars);
+  opt.optimize();
+  return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
+}
+
 TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
 
   const BasicInfo& bi = pci.basic_info;

@@ -147,6 +147,72 @@ void Optimizer::initialize(const vector<double>& x) {
   results_.x = x;
 }
 
+BasicTrustRegionSQP::BasicQP() {
+  initParameters();
+}
+BasicTrustRegionSQP::BasicQP(OptProbPtr prob) {
+  initParameters();
+  setProblem(prob);
+}
+
+void BasicQP::initParameters() {
+
+  max_time_ = INFINITY;
+
+}
+
+void BasicQP::setProblem(OptProbPtr prob) {
+  Optimizer::setProblem(prob);
+  model_ = prob->getModel();
+}
+
+OptStatus BasicQP::optimize() {
+
+  vector<string> cost_names = getCostNames(prob_->getCosts());
+  vector<ConstraintPtr> constraints = prob_->getConstraints();
+  vector<string> cnt_names = getCntNames(constraints);
+
+  DblVec& x_ = results_.x; // just so I don't have to rewrite code
+  if (x_.size() == 0) PRINT_AND_THROW("you forgot to initialize!");
+  if (!prob_) PRINT_AND_THROW("you forgot to set the optimization problem");    
+  x_ = prob_->getClosestFeasiblePoint(x_);
+  assert(x_.size() == prob_->getVars().size());
+  assert(prob_->getCosts().size() > 0 || constraints.size() > 0);
+  OptStatus retval = INVALID;
+
+  LOG_DEBUG("current iterate: %s", CSTR(x_));
+
+  vector<ConvexObjectivePtr> cost_models = convexifyCosts(prob_->getCosts(),x_, model_.get());
+  vector<ConvexConstraintsPtr> cnt_models = convexifyConstraints(constraints, x_, model_.get());
+  vector<ConvexObjectivePtr> cnt_cost_models = cntsToCosts(cnt_models, merit_error_coeff_, model_.get());
+	model_->update();
+	BOOST_FOREACH(ConvexObjectivePtr& cost, cost_models)cost->addConstraintsToModel();
+  BOOST_FOREACH(ConvexObjectivePtr& cost, cnt_cost_models)cost->addConstraintsToModel();
+  model_->update();
+  QuadExpr objective;
+  BOOST_FOREACH(ConvexObjectivePtr& co, cost_models)exprInc(objective, co->quad_);
+  BOOST_FOREACH(ConvexObjectivePtr& co, cnt_cost_models){
+    exprInc(objective, co->quad_);
+  }
+  model_->setObjective(objective);
+
+  CvxOptStatus status = model_->optimize();
+  if (status != CVX_SOLVED) {
+    LOG_ERROR("convex solver failed! set TRAJOPT_LOG_THRESH=DEBUG to see solver output. saving model to /tmp/fail.lp");
+    model_->writeToFile("/tmp/fail.lp");
+		retval = OPT_FAILED;
+	} else {
+		retval = SUCCESS;
+	}
+
+  assert(retval != INVALID && "should never happen");
+  results_.status = retval;
+  LOG_INFO("\n==================\n%s==================", CSTR(results_));
+
+  return retval;
+}
+
+
 BasicTrustRegionSQP::BasicTrustRegionSQP() {
   initParameters();
 }

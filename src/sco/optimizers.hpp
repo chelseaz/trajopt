@@ -71,6 +71,24 @@ protected:
   OptResults results_;
 };
 
+class BasicQP : public Optimizer {
+  /*
+	 * Solve a QP
+   */
+public:
+  double max_time_ // not yet implemented
+         ;
+
+  BasicQP();
+  BasicQP(OptProbPtr prob);
+  void setProblem(OptProbPtr prob);
+  OptStatus optimize();
+protected:
+  void initParameters();
+  ModelPtr model_;
+};
+
+
 class BasicTrustRegionSQP : public Optimizer {
   /*
    * Alternates between convexifying objectives and constraints and then solving convex subproblem
