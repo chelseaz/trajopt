@@ -147,10 +147,10 @@ void Optimizer::initialize(const vector<double>& x) {
   results_.x = x;
 }
 
-BasicTrustRegionSQP::BasicQP() {
+BasicQP::BasicQP() {
   initParameters();
 }
-BasicTrustRegionSQP::BasicQP(OptProbPtr prob) {
+BasicQP::BasicQP(OptProbPtr prob) {
   initParameters();
   setProblem(prob);
 }
@@ -184,16 +184,16 @@ OptStatus BasicQP::optimize() {
 
   vector<ConvexObjectivePtr> cost_models = convexifyCosts(prob_->getCosts(),x_, model_.get());
   vector<ConvexConstraintsPtr> cnt_models = convexifyConstraints(constraints, x_, model_.get());
-  vector<ConvexObjectivePtr> cnt_cost_models = cntsToCosts(cnt_models, merit_error_coeff_, model_.get());
+  /* vector<ConvexObjectivePtr> cnt_cost_models = cntsToCosts(cnt_models, merit_error_coeff_, model_.get()); */
 	model_->update();
 	BOOST_FOREACH(ConvexObjectivePtr& cost, cost_models)cost->addConstraintsToModel();
-  BOOST_FOREACH(ConvexObjectivePtr& cost, cnt_cost_models)cost->addConstraintsToModel();
+  /* BOOST_FOREACH(ConvexObjectivePtr& cost, cnt_cost_models)cost->addConstraintsToModel(); */
   model_->update();
   QuadExpr objective;
   BOOST_FOREACH(ConvexObjectivePtr& co, cost_models)exprInc(objective, co->quad_);
-  BOOST_FOREACH(ConvexObjectivePtr& co, cnt_cost_models){
-    exprInc(objective, co->quad_);
-  }
+  /* BOOST_FOREACH(ConvexObjectivePtr& co, cnt_cost_models){ */
+  /*   exprInc(objective, co->quad_); */
+  /* } */
   model_->setObjective(objective);
 
   CvxOptStatus status = model_->optimize();
@@ -202,7 +202,7 @@ OptStatus BasicQP::optimize() {
     model_->writeToFile("/tmp/fail.lp");
 		retval = OPT_FAILED;
 	} else {
-		retval = SUCCESS;
+		retval = OPT_CONVERGED; // may need another constant
 	}
 
   assert(retval != INVALID && "should never happen");
