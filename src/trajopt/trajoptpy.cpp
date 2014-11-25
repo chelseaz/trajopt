@@ -209,6 +209,9 @@ PyTrajOptResult PyOptimizeProblem(PyTrajOptProb& prob) {
   return OptimizeProblem(prob.m_prob, gInteractive);
 }
 
+PyTrajOptResult PyOptimizeTPSProblem(PyTrajOptProb& prob) {
+  return OptimizeTPSProblem(prob.m_prob, gInteractive);
+}
 
 class PyCollision {
 public:
@@ -495,6 +498,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   py::def("SetInteractive", &SetInteractive, "if True, pause and plot every iteration");
   py::def("ConstructProblem", &PyConstructProblem, "create problem from JSON string");
   py::def("OptimizeProblem", &PyOptimizeProblem);
+	py::def("OptimizeTPSProblem", &PyOptimizeTPSProblem);
 
   py::class_<PyTrajOptResult>("TrajOptResult", py::no_init)
       .def("GetCosts", &PyTrajOptResult::GetCosts)
