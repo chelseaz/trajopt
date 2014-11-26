@@ -468,7 +468,7 @@ TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, bool plot) {
 
 // This method constructs a decomposition problem to be optimized by
 // OptimizeDecompProblem.
-TrajOptProbPtr ConstructDecompProblem(const DecompProblemConstructionInfo& pci) {
+std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const DecompProblemConstructionInfo& pci) {
 
   const BasicInfo& bi = pci.basic_info;
   int n_steps = bi.n_steps;
@@ -519,11 +519,10 @@ TrajOptProbPtr ConstructDecompProblem(const DecompProblemConstructionInfo& pci) 
   tps_prob->SetInitExt(pci.init_info.data_ext);
   traj_prob->SetInitTraj(pci.init_info.data);
   traj_prob->SetInitExt(pci.init_info.data_ext);
-  //TODO(cfinn): return both problems (prob in a std::pair<TrajOptProbPtr> or a tuple)
-  return traj_prob;
+  return std::make_pair(traj_prob, tps_prob);
 }
 
-TrajOptProbPtr ConstructDecompProblem(const Json::Value& root, OpenRAVE::EnvironmentBasePtr env) {
+std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const Json::Value& root, OpenRAVE::EnvironmentBasePtr env) {
   DecompProblemConstructionInfo pci(env);
   pci.fromJson(root);
   return ConstructDecompProblem(pci);

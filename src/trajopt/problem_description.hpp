@@ -25,8 +25,8 @@ typedef boost::shared_ptr<TrajOptResult> TrajOptResultPtr;
 
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const ProblemConstructionInfo&);
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
-TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const DecompProblemConstructionInfo&);
-TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
+std::pair<TrajOptProbPtr,TrajOptProbPtr> TRAJOPT_API ConstructDecompProblem(const DecompProblemConstructionInfo&);
+std::pair<TrajOptProbPtr,TrajOptProbPtr> TRAJOPT_API ConstructDecompProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeDecompProblem(TrajOptProbPtr, TrajOptProbPtr, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeTPSProblem(TrajOptProbPtr, bool plot);
@@ -81,7 +81,7 @@ public:
   TrajPlotterPtr GetPlotter() {return m_trajplotter;}
 
   friend TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo&);
-  friend TrajOptProbPtr ConstructDecompProblem(const DecompProblemConstructionInfo&);
+  friend std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const DecompProblemConstructionInfo&);
 
 private:
   VarArray m_traj_vars;
