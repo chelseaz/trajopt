@@ -19,12 +19,16 @@ typedef boost::shared_ptr<TermInfo> TermInfoPtr;
 class TrajOptProb;
 typedef boost::shared_ptr<TrajOptProb> TrajOptProbPtr;
 struct ProblemConstructionInfo;
+struct DecompProblemConstructionInfo;
 struct TrajOptResult;
 typedef boost::shared_ptr<TrajOptResult> TrajOptResultPtr;
 
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const ProblemConstructionInfo&);
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
+TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const DecompProblemConstructionInfo&);
+TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, bool plot);
+TrajOptResultPtr TRAJOPT_API OptimizeDecompProblem(TrajOptProbPtr, bool plot);
 
 enum TermType {
   TT_COST,
@@ -36,7 +40,7 @@ enum TermType {
     TermInfoPtr out(new classname());\
     return out;\
   }
-  
+
 
 /**
  * Holds all the data for a trajectory optimization problem
@@ -56,6 +60,9 @@ public:
   VarArray& GetVars() {
     return m_traj_vars;
   }
+  VarArray& GetAuxVars() {
+    return m_traj_vars2;
+  }
   VarArray& GetExtVars() {
     return m_ext_vars;
   }
@@ -73,9 +80,14 @@ public:
   TrajPlotterPtr GetPlotter() {return m_trajplotter;}
 
   friend TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo&);
+  friend TrajOptProbPtr ConstructDecompProblem(const DecompProblemConstructionInfo&);
 
 private:
   VarArray m_traj_vars;
+  // This is the T' in the dual decomposition method.
+  VarArray m_traj_vars2;
+  // These are the dual variables in the decomposition method.
+  VarArray lambdas;
   VarArray m_ext_vars;
   ConfigurationPtr m_rad;
   TrajArray m_init_traj;
@@ -134,7 +146,7 @@ struct TRAJOPT_API TermInfo  {
   TermType term_type;
   virtual void fromJson(const Json::Value& v)=0;
   virtual void hatch(TrajOptProb& prob) = 0;
-  
+
 
   static TermInfoPtr fromName(const string& type);
 
@@ -150,7 +162,6 @@ private:
   static std::map<string, MakerFunc> name2maker;
 };
 // void fromJson(const Json::Value& v, TermInfoPtr&);
-
 /**
 This object holds all the data that's read from the JSON document
 */
@@ -167,6 +178,24 @@ public:
   ProblemConstructionInfo(OR::EnvironmentBasePtr _env) : env(_env) {}
   void fromJson(const Value& v);
 };
+
+/**
+This object holds all the data that's read from the JSON document
+This is specific to a decomposed problem, with separate tps terms and
+trajectory terms. Parses costs and contraints as "tps_costs"/"traj_costs"
+instead of "costs" and likewise for "constraints".
+*/
+struct TRAJOPT_API DecompProblemConstructionInfo : public ProblemConstructionInfo {
+public:
+  vector<TermInfoPtr> tps_cost_infos;
+  vector<TermInfoPtr> tps_cnt_infos;
+  vector<TermInfoPtr> traj_cost_infos;
+  vector<TermInfoPtr> traj_cnt_infos;
+
+  DecompProblemConstructionInfo(OR::EnvironmentBasePtr _env) : ProblemConstructionInfo(_env) {}
+  void fromJson(const Value& v);
+};
+
 
 /**
  \brief pose error
