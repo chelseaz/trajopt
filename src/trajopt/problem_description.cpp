@@ -323,8 +323,8 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
 
   // Some pseudocode:
   // loop until converge or something
-  // tps_prob->update_linear_cost_term(lambdas);
-  // traj_prob->update_linear_cost_term(-lambdas);
+  // tps_prob->updateLinearCostTerm(lambdas);
+  // traj_prob->updateLinearCostTerm(-lambdas);
   // TrajOptResultsPtr tps_result = OptimizeQPProblem(tps_prob, plot);
   // TrajOptResultsPtr traj_result = OptimizeProblem(traj_prob, plot);
   // lambdas = lambdas - nu * (trajToDblVec(tps_result.traj) - trajToDblVec(traj_result.traj))
