@@ -318,18 +318,41 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
 // iteratively constructs a QP and an SQP each with a linear penalty term on
 // the trajectory variable to guide them towards a common trajectory.
 TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
-  double nu = 0.5;
-  //double lambdas 0; // initialize an array
+  // The dimension of the trajectory vector
+  int traj_dim = tps_prob->GetNumDOF() * tps_prob->GetNumSteps();
 
-  // Some pseudocode:
-  // loop until converge or something
-  // tps_prob->updateLinearCostTerm(lambdas);
-  // traj_prob->updateLinearCostTerm(-lambdas);
-  // TrajOptResultsPtr tps_result = OptimizeQPProblem(tps_prob, plot);
-  // TrajOptResultsPtr traj_result = OptimizeProblem(traj_prob, plot);
-  // lambdas = lambdas - nu * (trajToDblVec(tps_result.traj) - trajToDblVec(traj_result.traj))
-  // return traj_result;
-  return TrajOptResultPtr();
+  // TODO(cfinn): at some point, we will want nu to change over iteration.
+  // Hyperparameters
+  double nu = 0.5, errorThresh = 1e-3 * traj_dim, maxIter = 50;
+
+  // Initialization of variables
+  double error;
+  bool converged = false;
+  TrajOptResultPtr tps_result, traj_result;
+  DblVec lambdas(traj_dim, 0.0);
+
+  for (int iter = 0; iter < maxIter; ++iter) {
+    // tps_prob->updateLinearCostTerm(&lambdas);
+    // traj_prob->updateLinearCostTerm(&lambdas);
+
+    tps_result = OptimizeTPSProblem(tps_prob, plot);
+    traj_result = OptimizeProblem(traj_prob, plot);
+
+    // Calculate absolute error and
+    error = 0.0;
+    for (int i = 0; i < tps_result->traj.size(); ++i) {
+      error += std::abs(tps_result->traj(i) - traj_result->traj(i));
+      lambdas[i] = lambdas[i] - nu * (tps_result->traj(i) - traj_result->traj(i));
+    }
+    if (error < errorThresh) {
+      converged = true;
+      break;
+    } else {
+      tps_prob->SetInitTraj(tps_result->traj);
+      traj_prob->SetInitTraj(traj_result->traj);
+    }
+  }
+  return traj_result;
 }
 
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
