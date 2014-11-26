@@ -317,6 +317,9 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
 // This function optimizes the problem using dual decomposition. It
 // iteratively constructs a QP and an SQP each with a linear penalty term on
 // the trajectory variable to guide them towards a common trajectory.
+// NOTE: This is an old version that calls OptimizeProblem rather than doing
+// something smarter.
+/*
 TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
   // The dimension of the trajectory vector
   int traj_dim = tps_prob->GetNumDOF() * tps_prob->GetNumSteps();
@@ -354,7 +357,82 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
   }
   return traj_result;
 }
+*/
 
+// This function optimizes the problem using dual decomposition. It
+// iteratively constructs a QP and an SQP each with a linear penalty term on
+// the trajectory variable to guide them towards a common trajectory.
+TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
+  // The dimension of the trajectory vector
+  int traj_dim = tps_prob->GetNumDOF() * tps_prob->GetNumSteps();
+
+  // TODO(cfinn): at some point, we will want nu to change over iteration.
+  // Hyperparameters
+  double nu = 0.5, errorThresh = 1e-3 * traj_dim, maxIter = 50;
+
+  // Initialization of variables
+  double error;
+  bool converged = false;
+  TrajOptResultPtr tps_result, traj_result;
+  DblVec lambdas(traj_dim, 0.0);
+  DblVec init_tps_vars = trajToDblVec(tps_prob->GetInitTraj());
+  DblVec init_tps_ext = trajToDblVec(tps_prob->GetInitExt());
+  DblVec init_traj_vars = trajToDblVec(traj_prob->GetInitTraj());
+  DblVec init_traj_ext = trajToDblVec(traj_prob->GetInitExt());
+  DblVec init_vars_all;
+
+  BasicQP qp_opt;
+  BasicTrustRegionSQP sqp_opt;
+
+  for (int iter = 0; iter < maxIter; ++iter) {
+    // Initialize and Optimize TPS Problem
+    // Initialize with most recent trajectory and add lambdas term.
+    qp_opt = BasicQP(tps_prob);
+    if (plot) {
+      SetupPlotting(*tps_prob, qp_opt);
+    }
+    init_vars_all = DblVec(init_tps_vars);
+    init_vars_all.insert(init_vars_all.end(), init_tps_ext.begin(), init_tps_ext.end());
+    qp_opt.initialize(init_vars_all);
+    // TODO: Add function to add a affine term to the objective.
+    // qp_opt.addAffineCostTerm(&lambdas)
+    qp_opt.optimize();
+    tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
+
+    // Initialize and Optimize Trajectory problem:
+    sqp_opt = BasicTrustRegionSQP(traj_prob);
+    sqp_opt.max_iter_ = 40;
+    sqp_opt.min_approx_improve_frac_ = .001;
+    sqp_opt.improve_ratio_threshold_ = .2;
+    sqp_opt.merit_error_coeff_ = 20;
+    if (plot) {
+      SetupPlotting(*traj_prob, sqp_opt);
+    }
+    init_vars_all = DblVec(init_traj_vars);
+    init_vars_all.insert(init_vars_all.end(), init_traj_ext.begin(), init_traj_ext.end());
+    sqp_opt.initialize(init_vars_all);
+    // sqp_opt.addAffineCostTerm(&lambdas);
+    sqp_opt.optimize();
+    traj_result = TrajOptResultPtr(new TrajOptResult(sqp_opt.results(), *traj_prob));
+
+    // Calculate absolute error between trajectories
+    error = 0.0;
+    for (int i = 0; i < tps_result->traj.size(); ++i) {
+      error += std::abs(tps_result->traj(i) - traj_result->traj(i));
+      lambdas[i] = lambdas[i] - nu * (tps_result->traj(i) - traj_result->traj(i));
+    }
+    if (error < errorThresh) {
+      converged = true;
+      break;
+    } else {
+      init_tps_vars = trajToDblVec(tps_result->traj);
+      init_tps_ext = trajToDblVec(tps_result->ext);
+      init_traj_vars = trajToDblVec(traj_result->traj);
+      init_traj_ext = trajToDblVec(traj_result->ext);
+    }
+  }
+  return traj_result;
+}
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   Configuration::SaverPtr saver = prob->GetRAD()->Save();
   BasicTrustRegionSQP opt(prob);
