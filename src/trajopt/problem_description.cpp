@@ -317,28 +317,19 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
 // This function optimizes the problem using dual decomposition. It
 // iteratively constructs a QP and an SQP each with a linear penalty term on
 // the trajectory variable to guide them towards a common trajectory.
-TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr prob, bool plot) {
-  Configuration::SaverPtr saver = prob->GetRAD()->Save();
-  BasicTrustRegionSQP opt(prob);
-  // Set the multiplier/step on dual variable update.
-  // Right now this is a constant, but we may want this to increase over time.
-  //opt.nu = 0.5;
+TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
+  double nu = 0.5;
+  //double lambdas 0; // initialize an array
 
-  // The rest are parameters on the SQP.
-  opt.max_iter_ = 40;
-  //opt.max_merit_coeff_increases_ = 10;
-  opt.min_approx_improve_frac_ = .001;
-  opt.improve_ratio_threshold_ = .2;
-  opt.merit_error_coeff_ = 20;
-  if (plot) {
-    SetupPlotting(*prob, opt);
-  }
-  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
-  DblVec init_ext = trajToDblVec(prob->GetInitExt());
-  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
-  opt.initialize(init_vars);
-  opt.optimize();
-  return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
+  // Some pseudocode:
+  // loop until converge or something
+  // tps_prob->update_linear_cost_term(lambdas);
+  // traj_prob->update_linear_cost_term(-lambdas);
+  // TrajOptResultsPtr tps_result = OptimizeQPProblem(tps_prob, plot);
+  // TrajOptResultsPtr traj_result = OptimizeProblem(traj_prob, plot);
+  // lambdas = lambdas - nu * (trajToDblVec(tps_result.traj) - trajToDblVec(traj_result.traj))
+  // return traj_result;
+  return TrajOptResultPtr();
 }
 
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
@@ -383,40 +374,54 @@ TrajOptProbPtr ConstructDecompProblem(const DecompProblemConstructionInfo& pci) 
   int m_ext = bi.m_ext;
   int n_ext = bi.n_ext;
 
-  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
-  int n_dof = prob->m_rad->GetDOF();
+  // Make the sqp traj problem.
+  TrajOptProbPtr traj_prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
+  // Make the tps problem
+  TrajOptProbPtr tps_prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
 
-  DblVec cur_dofvals = prob->m_rad->GetDOFValues();
+  int n_dof = traj_prob->m_rad->GetDOF();
+  DblVec cur_dofvals = traj_prob->m_rad->GetDOFValues();
 
   if (bi.start_fixed) {
     if (pci.init_info.data.rows() > 0 && !allClose(toVectorXd(cur_dofvals), pci.init_info.data.row(0))) {
       PRINT_AND_THROW( "robot dof values don't match initialization. I don't know what you want me to use for the dof values");
     }
     for (int j=0; j < n_dof; ++j) {
-      prob->addLinearConstraint(exprSub(AffExpr(prob->m_traj_vars(0,j)), cur_dofvals[j]), EQ);
+      traj_prob->addLinearConstraint(exprSub(AffExpr(traj_prob->m_traj_vars(0,j)), cur_dofvals[j]), EQ);
+      tps_prob->addLinearConstraint(exprSub(AffExpr(tps_prob->m_traj_vars(0,j)), cur_dofvals[j]), EQ);
     }
   }
 
   if (!bi.dofs_fixed.empty()) {
     BOOST_FOREACH(const int& dof_ind, bi.dofs_fixed) {
-      for (int i=1; i < prob->GetNumSteps(); ++i) {
-        prob->addLinearConstraint(exprSub(AffExpr(prob->m_traj_vars(i,dof_ind)), AffExpr(prob->m_traj_vars(0,dof_ind))), EQ);
+      for (int i=1; i < traj_prob->GetNumSteps(); ++i) {
+        traj_prob->addLinearConstraint(exprSub(AffExpr(traj_prob->m_traj_vars(i,dof_ind)), AffExpr(traj_prob->m_traj_vars(0,dof_ind))), EQ);
+        tps_prob->addLinearConstraint(exprSub(AffExpr(tps_prob->m_traj_vars(i,dof_ind)), AffExpr(tps_prob->m_traj_vars(0,dof_ind))), EQ);
       }
     }
   }
 
   BOOST_FOREACH(const TermInfoPtr& ci, pci.tps_cost_infos) {
-    ci->hatch(*prob);
+    ci->hatch(*tps_prob);
   }
   BOOST_FOREACH(const TermInfoPtr& ci, pci.tps_cnt_infos) {
-    ci->hatch(*prob);
+    ci->hatch(*tps_prob);
+  }
+  BOOST_FOREACH(const TermInfoPtr& ci, pci.traj_cost_infos) {
+    ci->hatch(*traj_prob);
+  }
+  BOOST_FOREACH(const TermInfoPtr& ci, pci.traj_cnt_infos) {
+    ci->hatch(*traj_prob);
   }
 
-  prob->SetInitTraj(pci.init_info.data);
-  prob->SetInitExt(pci.init_info.data_ext);
-  return prob;
-
+  tps_prob->SetInitTraj(pci.init_info.data);
+  tps_prob->SetInitExt(pci.init_info.data_ext);
+  traj_prob->SetInitTraj(pci.init_info.data);
+  traj_prob->SetInitExt(pci.init_info.data_ext);
+  //TODO(cfinn): return both problems (prob in a std::pair<TrajOptProbPtr> or a tuple)
+  return traj_prob;
 }
+
 TrajOptProbPtr ConstructDecompProblem(const Json::Value& root, OpenRAVE::EnvironmentBasePtr env) {
   DecompProblemConstructionInfo pci(env);
   pci.fromJson(root);
