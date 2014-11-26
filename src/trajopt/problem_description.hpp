@@ -25,6 +25,7 @@ typedef boost::shared_ptr<TrajOptResult> TrajOptResultPtr;
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const ProblemConstructionInfo&);
 TrajOptProbPtr TRAJOPT_API ConstructProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, bool plot);
+TrajOptResultPtr TRAJOPT_API OptimizeTPSProblem(TrajOptProbPtr, bool plot);
 
 enum TermType {
   TT_COST,
