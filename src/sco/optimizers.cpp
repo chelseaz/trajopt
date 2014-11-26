@@ -158,6 +158,7 @@ BasicQP::BasicQP(OptProbPtr prob) {
 void BasicQP::initParameters() {
 
   max_time_ = INFINITY;
+  merit_error_coeff_ = 10;
 
 }
 
@@ -183,10 +184,10 @@ OptStatus BasicQP::optimize() {
   LOG_DEBUG("current iterate: %s", CSTR(x_));
 
   vector<ConvexObjectivePtr> cost_models = convexifyCosts(prob_->getCosts(),x_, model_.get());
-  vector<ConvexConstraintsPtr> cnt_models = convexifyConstraints(constraints, x_, model_.get());
+  /* vector<ConvexConstraintsPtr> cnt_models = convexifyConstraints(constraints, x_, model_.get()); */
   /* vector<ConvexObjectivePtr> cnt_cost_models = cntsToCosts(cnt_models, merit_error_coeff_, model_.get()); */
-	model_->update();
-	BOOST_FOREACH(ConvexObjectivePtr& cost, cost_models)cost->addConstraintsToModel();
+  model_->update();
+  BOOST_FOREACH(ConvexObjectivePtr& cost, cost_models)cost->addConstraintsToModel();
   /* BOOST_FOREACH(ConvexObjectivePtr& cost, cnt_cost_models)cost->addConstraintsToModel(); */
   model_->update();
   QuadExpr objective;
@@ -205,9 +206,16 @@ OptStatus BasicQP::optimize() {
 		retval = OPT_CONVERGED; // may need another constant
 	}
 
+  DblVec model_var_vals = model_->getVarValues(model_->getVars());
+  DblVec new_x(model_var_vals.begin(), model_var_vals.begin() + x_.size());
+  x_ = new_x;
+
+
   assert(retval != INVALID && "should never happen");
   results_.status = retval;
   LOG_INFO("\n==================\n%s==================", CSTR(results_));
+
+  callCallbacks(x_);
 
   return retval;
 }
