@@ -29,6 +29,7 @@ TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const DecompProblemConstructio
 TrajOptProbPtr TRAJOPT_API ConstructDecompProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeDecompProblem(TrajOptProbPtr, bool plot);
+TrajOptResultPtr TRAJOPT_API OptimizeTPSProblem(TrajOptProbPtr, bool plot);
 
 enum TermType {
   TT_COST,

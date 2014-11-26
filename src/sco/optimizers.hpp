@@ -78,6 +78,7 @@ class BasicQP : public Optimizer {
 public:
   double max_time_ // not yet implemented
          ;
+  double merit_error_coeff_; // initial penalty coefficient
 
   BasicQP();
   BasicQP(OptProbPtr prob);
