@@ -40,17 +40,24 @@ void expectAllNear(const DblVec& x, const DblVec& y, double abstol) {
 double f_QuadraticSeparable(const VectorXd& x) {
   return x(0)*x(0) + sq(x(1) - 1) + sq(x(2)-2);
 }
+VectorXd g_qp_constraint(const VectorXd& x) {
+  VectorXd out(1);
+  out(0) = 3 - x(1);
+  return out;
+}
 TEST(QP, QuadraticSeparable)  {
   // if the problem is exactly a QP, it should be solved in one iteration
   OptProbPtr prob;
   setupProblem(prob, 3);
   prob->addCost(CostPtr(new CostFromFunc(ScalarOfVector::construct(&f_QuadraticSeparable), prob->getVars(), "f")));
+  /* testProblem(ScalarOfVector::construct(&f_TP1), VectorOfVector::construct(&g_TP1), INEQ, list_of(-2)(1), list_of(1)(1)); */
+  prob->addConstraint(ConstraintPtr(new ConstraintFromFunc(VectorOfVector::construct(&g_qp_constraint), prob->getVars(), VectorXd(), INEQ,"g")));
   BasicQP qpsolver(prob);
   vector<double> x = list_of(3)(4)(5);
   qpsolver.initialize(x);
   OptStatus qpstatus = qpsolver.optimize();
   ASSERT_EQ(qpstatus, OPT_CONVERGED);
-  expectAllNear(qpsolver.x(), list_of(0)(1)(2), 1e-3);
+  expectAllNear(qpsolver.x(), list_of(0)(3)(2), 1e-3);
   // todo: checks on number of iterations and function evaluates
 }
 TEST(SQP, QuadraticSeparable)  {
