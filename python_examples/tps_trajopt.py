@@ -42,10 +42,12 @@ N = _u[:,n_cnts:]
 z = np.linalg.solve(2.0*N.T.dot(H.dot(N)), -N.T.dot(f))
 x = N.dot(z)
 
+x_na = np.load("x_na.py")
+
 request = {
   "basic_info" : {
     "n_steps" : 10,
-    "m_ext" : z.shape[0], 
+    "m_ext" : z.shape[0],
     "n_ext" : z.shape[1],
     "manip" : "rightarm", # see below for valid values
     "start_fixed" : True # i.e., DOF values at first timestep are fixed based on current robot state
@@ -76,13 +78,13 @@ request = {
   "constraints" : [
   # BEGIN pose_constraint
   {
-    "type" : "pose", 
-    "params" : {"xyz" : xyz_target, 
-                "wxyz" : quat_target, 
+    "type" : "pose",
+    "params" : {"xyz" : xyz_target,
+                "wxyz" : quat_target,
                 "link": "r_gripper_tool_frame",
                 "timestep" : 9
                 }
-                 
+
   }
   # END pose_constraint
   ],
