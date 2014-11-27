@@ -38,10 +38,10 @@ typedef vector<AffExpr> AffExprVector;
 typedef vector<QuadExpr> QuadExprVector;
 
 /** @brief Convex optimization problem
- 
+
 Gotchas:
 - after adding a variable, need to call update() before doing anything else with that variable
- 
+
  */
 class Model {
 public:
@@ -114,6 +114,7 @@ struct AffExpr { // affine expression
   AffExpr() : constant(0) {}
   explicit AffExpr(double a) : constant(a) {}
   explicit AffExpr(const Var& v) : constant(0), coeffs(1, 1), vars(1, v) {}
+  AffExpr(vector<double> coeffs_, vector<Var> vars_) : coeffs(coeffs_), vars(vars_) {}
   AffExpr(const AffExpr& other) :
     constant(other.constant), coeffs(other.coeffs), vars(other.vars) {}
   size_t size() const {return coeffs.size();}
