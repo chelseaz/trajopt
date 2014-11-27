@@ -96,7 +96,7 @@ void printCostInfo(const vector<double>& old_cost_vals, const vector<double>& mo
     for (size_t i=0; i < old_cost_vals.size(); ++i) {
       double approx_improve = old_cost_vals[i] - model_cost_vals[i];
       double exact_improve = old_cost_vals[i] - new_cost_vals[i];
-      if (fabs(approx_improve) > 1e-8) 
+      if (fabs(approx_improve) > 1e-8)
         printf("%15s | %10.3e | %10.3e | %10.3e | %10.3e\n", cost_names[i].c_str(), old_cost_vals[i], approx_improve, exact_improve, exact_improve/approx_improve);
       else
         printf("%15s | %10.3e | %10.3e | %10.3e | %10s\n",cost_names[i].c_str(), old_cost_vals[i], approx_improve, exact_improve, "  ------  ");
@@ -107,9 +107,9 @@ void printCostInfo(const vector<double>& old_cost_vals, const vector<double>& mo
       double approx_improve = old_cnt_vals[i] - model_cnt_vals[i];
       double exact_improve = old_cnt_vals[i] - new_cnt_vals[i];
       if (fabs(approx_improve) > 1e-8)
-        printf("%15s | %10.3e | %10.3e | %10.3e | %10.3e\n", cnt_names[i].c_str(), merit_coeff*old_cnt_vals[i], merit_coeff*approx_improve, merit_coeff*exact_improve, exact_improve/approx_improve); 
-      else 
-        printf("%15s | %10.3e | %10.3e | %10.3e | %10s\n", cnt_names[i].c_str(), merit_coeff*old_cnt_vals[i], merit_coeff*approx_improve, merit_coeff*exact_improve, "  ------  "); 
+        printf("%15s | %10.3e | %10.3e | %10.3e | %10.3e\n", cnt_names[i].c_str(), merit_coeff*old_cnt_vals[i], merit_coeff*approx_improve, merit_coeff*exact_improve, exact_improve/approx_improve);
+      else
+        printf("%15s | %10.3e | %10.3e | %10.3e | %10s\n", cnt_names[i].c_str(), merit_coeff*old_cnt_vals[i], merit_coeff*approx_improve, merit_coeff*exact_improve, "  ------  ");
     }
 
 }
@@ -141,18 +141,18 @@ void Optimizer::callCallbacks(DblVec& x) {
 
 void Optimizer::initialize(const vector<double>& x) {
   if (!prob_) PRINT_AND_THROW("need to set the problem before initializing");
-  if (prob_->getVars().size() != x.size()) 
+  if (prob_->getVars().size() != x.size())
     PRINT_AND_THROW(boost::format("initialization vector has wrong length. expected %i got %i")%prob_->getVars().size()%x.size());
-  results_.clear(); 
+  results_.clear();
   results_.x = x;
 }
 
 BasicQP::BasicQP() {
   initParameters();
 }
-BasicQP::BasicQP(OptProbPtr prob) {
+BasicQP::BasicQP(OptProbPtr prob, DblVec* lambdas) {
   initParameters();
-  setProblem(prob);
+  setProblem(prob, lambdas);
 }
 
 void BasicQP::initParameters() {
@@ -167,6 +167,13 @@ void BasicQP::setProblem(OptProbPtr prob) {
   model_ = prob->getModel();
 }
 
+void BasicQP::setProblem(OptProbPtr prob, DblVec* lambdas) {
+  Optimizer::setProblem(prob);
+  model_ = prob->getModel();
+  // lambdas_ = DblVec(prob->GetVars().size(), 0.0);
+  lambdas_ = *lambdas;
+}
+
 OptStatus BasicQP::optimize() {
 
   vector<string> cost_names = getCostNames(prob_->getCosts());
@@ -175,7 +182,7 @@ OptStatus BasicQP::optimize() {
 
   DblVec& x_ = results_.x; // just so I don't have to rewrite code
   if (x_.size() == 0) PRINT_AND_THROW("you forgot to initialize!");
-  if (!prob_) PRINT_AND_THROW("you forgot to set the optimization problem");    
+  if (!prob_) PRINT_AND_THROW("you forgot to set the optimization problem");
   x_ = prob_->getClosestFeasiblePoint(x_);
   assert(x_.size() == prob_->getVars().size());
   assert(prob_->getCosts().size() > 0 || constraints.size() > 0);
@@ -195,6 +202,8 @@ OptStatus BasicQP::optimize() {
   BOOST_FOREACH(ConvexObjectivePtr& co, cnt_cost_models){
     exprInc(objective, co->quad_);
   }
+  AffExpr lambda_cost_expr(lambdas_, prob_->getVars());
+  exprInc(objective, lambda_cost_expr);
   model_->setObjective(objective);
 
   CvxOptStatus status = model_->optimize();
@@ -299,8 +308,8 @@ OptStatus BasicTrustRegionSQP::optimize() {
 
   DblVec& x_ = results_.x; // just so I don't have to rewrite code
   if (x_.size() == 0) PRINT_AND_THROW("you forgot to initialize!");
-  if (!prob_) PRINT_AND_THROW("you forgot to set the optimization problem");    
-  
+  if (!prob_) PRINT_AND_THROW("you forgot to set the optimization problem");
+
   x_ = prob_->getClosestFeasiblePoint(x_);
 
   assert(x_.size() == prob_->getVars().size());
@@ -417,7 +426,7 @@ OptStatus BasicTrustRegionSQP::optimize() {
               approx_merit_improve/old_merit, min_approx_improve_frac_);
           retval = OPT_CONVERGED;
           goto penaltyadjustment;
-        } 
+        }
         else if (exact_merit_improve < 0 || merit_improve_ratio < improve_ratio_threshold_) {
           adjustTrustRegion(trust_shrink_ratio_);
           LOG_INFO("shrunk trust region. new box size: %.4f",

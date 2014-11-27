@@ -81,12 +81,14 @@ public:
   double merit_error_coeff_; // initial penalty coefficient
 
   BasicQP();
-  BasicQP(OptProbPtr prob);
+  BasicQP(OptProbPtr prob, DblVec* lambdas);
   void setProblem(OptProbPtr prob);
+  void setProblem(OptProbPtr prob, DblVec* lambdas);
   OptStatus optimize();
 protected:
   void initParameters();
   ModelPtr model_;
+  DblVec lambdas_;
 };
 
 
