@@ -387,15 +387,13 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
   for (int iter = 0; iter < maxIter; ++iter) {
     // Initialize and Optimize TPS Problem
     // Initialize with most recent trajectory and add lambdas term.
-    qp_opt = BasicQP(tps_prob);
+    qp_opt = BasicQP(tps_prob, &lambdas);
     if (plot) {
       SetupPlotting(*tps_prob, qp_opt);
     }
     init_vars_all = DblVec(init_tps_vars);
     init_vars_all.insert(init_vars_all.end(), init_tps_ext.begin(), init_tps_ext.end());
     qp_opt.initialize(init_vars_all);
-    // TODO: Add function to add a affine term to the objective.
-    // qp_opt.addAffineCostTerm(&lambdas)
     qp_opt.optimize();
     tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
 
@@ -411,7 +409,6 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     init_vars_all = DblVec(init_traj_vars);
     init_vars_all.insert(init_vars_all.end(), init_traj_ext.begin(), init_traj_ext.end());
     sqp_opt.initialize(init_vars_all);
-    // sqp_opt.addAffineCostTerm(&lambdas);
     sqp_opt.optimize();
     traj_result = TrajOptResultPtr(new TrajOptResult(sqp_opt.results(), *traj_prob));
 
@@ -452,19 +449,19 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
 }
 
-TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, bool plot) {
-  Configuration::SaverPtr saver = prob->GetRAD()->Save();
-  BasicQP opt(prob);
-  if (plot) {
-    SetupPlotting(*prob, opt);
-  }
-  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
-  DblVec init_ext = trajToDblVec(prob->GetInitExt());
-  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
-  opt.initialize(init_vars);
-  opt.optimize();
-  return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
-}
+/* TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, bool plot) { */
+/*   Configuration::SaverPtr saver = prob->GetRAD()->Save(); */
+/*   BasicQP opt(prob); */
+/*   if (plot) { */
+/*     SetupPlotting(*prob, opt); */
+/*   } */
+/*   DblVec init_vars = trajToDblVec(prob->GetInitTraj()); */
+/*   DblVec init_ext = trajToDblVec(prob->GetInitExt()); */
+/*   init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end()); */
+/*   opt.initialize(init_vars); */
+/*   opt.optimize(); */
+/*   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob)); */
+/* } */
 
 // This method constructs a decomposition problem to be optimized by
 // OptimizeDecompProblem.

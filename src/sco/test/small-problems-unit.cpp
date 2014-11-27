@@ -52,7 +52,8 @@ TEST(QP, QuadraticSeparable)  {
   prob->addCost(CostPtr(new CostFromFunc(ScalarOfVector::construct(&f_QuadraticSeparable), prob->getVars(), "f")));
   /* testProblem(ScalarOfVector::construct(&f_TP1), VectorOfVector::construct(&g_TP1), INEQ, list_of(-2)(1), list_of(1)(1)); */
   prob->addConstraint(ConstraintPtr(new ConstraintFromFunc(VectorOfVector::construct(&g_qp_constraint), prob->getVars(), VectorXd(), INEQ,"g")));
-  BasicQP qpsolver(prob);
+  DblVec zeros(3,0);
+  BasicQP qpsolver(prob, &zeros);
   vector<double> x = list_of(3)(4)(5);
   qpsolver.initialize(x);
   OptStatus qpstatus = qpsolver.optimize();
