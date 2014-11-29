@@ -375,6 +375,7 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
   bool converged = false;
   TrajOptResultPtr tps_result, traj_result;
   DblVec lambdas(traj_dim, 0.0);
+  DblVec neg_lambdas(traj_dim, 0.0);
   DblVec init_tps_vars = trajToDblVec(tps_prob->GetInitTraj());
   DblVec init_tps_ext = trajToDblVec(tps_prob->GetInitExt());
   DblVec init_traj_vars = trajToDblVec(traj_prob->GetInitTraj());
@@ -398,7 +399,7 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
 
     // Initialize and Optimize Trajectory problem:
-    sqp_opt = BasicTrustRegionSQP(traj_prob);
+    sqp_opt = BasicTrustRegionSQP(traj_prob, &neg_lambdas);
     sqp_opt.max_iter_ = 40;
     sqp_opt.min_approx_improve_frac_ = .001;
     sqp_opt.improve_ratio_threshold_ = .2;
@@ -417,6 +418,7 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     for (int i = 0; i < tps_result->traj.size(); ++i) {
       error += std::abs(tps_result->traj(i) - traj_result->traj(i));
       lambdas[i] = lambdas[i] - nu * (tps_result->traj(i) - traj_result->traj(i));
+      neg_lambdas[i] = - lambdas [i];
     }
     if (error < errorThresh) {
       converged = true;

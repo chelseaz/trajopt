@@ -120,13 +120,17 @@ public:
 
   BasicTrustRegionSQP();
   BasicTrustRegionSQP(OptProbPtr prob);
+  BasicTrustRegionSQP(OptProbPtr prob, DblVec* lambdas);
   void setProblem(OptProbPtr prob);
+  void setProblem(OptProbPtr prob, DblVec* lambdas);
   OptStatus optimize();
 protected:
   void adjustTrustRegion(double ratio);
   void setTrustBoxConstraints(const vector<double>& x);
   void initParameters();
   ModelPtr model_;
+  bool use_lambdas;
+  DblVec lambdas_;
 };
 
 

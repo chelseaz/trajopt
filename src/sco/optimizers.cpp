@@ -238,6 +238,10 @@ BasicTrustRegionSQP::BasicTrustRegionSQP(OptProbPtr prob) {
   setProblem(prob);
 }
 
+BasicTrustRegionSQP::BasicTrustRegionSQP(OptProbPtr prob, DblVec* lambdas) {
+  initParameters();
+  setProblem(prob, lambdas);
+}
 void BasicTrustRegionSQP::initParameters() {
 
   improve_ratio_threshold_ = .25;
@@ -255,12 +259,19 @@ void BasicTrustRegionSQP::initParameters() {
   merit_error_coeff_ = 10;
   trust_box_size_ = 1e-1;
 
-
+  use_lambdas = false;
 }
 
 void BasicTrustRegionSQP::setProblem(OptProbPtr prob) {
   Optimizer::setProblem(prob);
   model_ = prob->getModel();
+}
+
+void BasicTrustRegionSQP::setProblem(OptProbPtr prob, DblVec* lambdas) {
+  Optimizer::setProblem(prob);
+  model_ = prob->getModel();
+  use_lambdas = true;
+  lambdas_ = *lambdas;
 }
 
 void BasicTrustRegionSQP::adjustTrustRegion(double ratio) {
@@ -356,6 +367,10 @@ OptStatus BasicTrustRegionSQP::optimize() {
         exprInc(objective, co->quad_);
       }
 //    objective = cleanupExpr(objective);
+      if (use_lambdas == true) {
+          AffExpr lambda_cost_expr(lambdas_, prob_->getVars());
+          exprInc(objective, lambda_cost_expr);
+      }
       model_->setObjective(objective);
 
 //    if (logging::filter() >= IPI_LEVEL_DEBUG) {
