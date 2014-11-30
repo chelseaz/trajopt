@@ -275,6 +275,8 @@ void ProblemConstructionInfo::fromJson(const Value& v) {
 
 void DecompProblemConstructionInfo::fromJson(const Value& v) {
   childFromJson(v, basic_info, "basic_info");
+  // traj basic info is different because it doesn't have the variables of tps.
+  childFromJson(v, traj_basic_info, "traj_basic_info");
   RobotBasePtr robot = (basic_info.robot=="") ? GetRobot(*env) : GetRobotByName(*env, basic_info.robot);
   if (!robot) {
     PRINT_AND_THROW("couldn't get robot");
@@ -291,11 +293,12 @@ void DecompProblemConstructionInfo::fromJson(const Value& v) {
   if (v.isMember("traj_costs")) fromJsonArray(v["traj_costs"], traj_cost_infos);
   gReadingCosts=false;
   gReadingConstraints=true;
-  if (v.isMember("tps_constraints")) fromJsonArray(v["tps_constraints"], cnt_infos);
-  if (v.isMember("traj_constraints")) fromJsonArray(v["traj_constraints"], cnt_infos);
+  if (v.isMember("tps_constraints")) fromJsonArray(v["tps_constraints"], tps_cnt_infos);
+  if (v.isMember("traj_constraints")) fromJsonArray(v["traj_constraints"], traj_cnt_infos);
   gReadingConstraints=false;
 
-  childFromJson(v, init_info, "init_info");
+  childFromJson(v, tps_init_info, "tps_init_info");
+  childFromJson(v, traj_init_info, "traj_init_info");
   gPCI = NULL;
 
 }
@@ -334,7 +337,8 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
   DblVec init_tps_vars = trajToDblVec(tps_prob->GetInitTraj());
   DblVec init_tps_ext = trajToDblVec(tps_prob->GetInitExt());
   DblVec init_traj_vars = trajToDblVec(traj_prob->GetInitTraj());
-  DblVec init_traj_ext = trajToDblVec(traj_prob->GetInitExt());
+  // This is initialized to be all zeros, but should just be ignored.
+  // DblVec init_traj_ext = trajToDblVec(traj_prob->GetInitExt());
   DblVec init_vars_all;
 
   BasicQP qp_opt;
@@ -349,8 +353,12 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     if (plot) {
       SetupPlotting(*tps_prob, qp_opt);
     }
+
     init_vars_all = DblVec(init_tps_vars);
     init_vars_all.insert(init_vars_all.end(), init_tps_ext.begin(), init_tps_ext.end());
+    LOG_INFO("Num init vars: %lu, %lu", init_tps_vars.size(), init_tps_ext.size());
+    LOG_INFO("Num prob vars: %d, %d", tps_prob->GetVars().size(), tps_prob->GetExtVars().size());
+    LOG_INFO("Initializing and Optimizing QP");
     qp_opt.initialize(init_vars_all);
     qp_opt.optimize();
     tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
@@ -365,7 +373,8 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
       SetupPlotting(*traj_prob, sqp_opt);
     }
     init_vars_all = DblVec(init_traj_vars);
-    init_vars_all.insert(init_vars_all.end(), init_traj_ext.begin(), init_traj_ext.end());
+    // init_vars_all.insert(init_vars_all.end(), init_traj_ext.begin(), init_traj_ext.end());
+    LOG_INFO("Initializing and Optimizing SQP");
     sqp_opt.initialize(init_vars_all);
     sqp_opt.optimize();
     traj_result = TrajOptResultPtr(new TrajOptResult(sqp_opt.results(), *traj_prob));
@@ -384,7 +393,7 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
       init_tps_vars = trajToDblVec(tps_result->traj);
       init_tps_ext = trajToDblVec(tps_result->ext);
       init_traj_vars = trajToDblVec(traj_result->traj);
-      init_traj_ext = trajToDblVec(traj_result->ext);
+      // init_traj_ext = trajToDblVec(traj_result->ext);
     }
   }
   return traj_result;
@@ -426,20 +435,27 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
 // OptimizeDecompProblem.
 std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const DecompProblemConstructionInfo& pci) {
 
-  const BasicInfo& bi = pci.basic_info;
-  int n_steps = bi.n_steps;
-  int m_ext = bi.m_ext;
-  int n_ext = bi.n_ext;
+  const BasicInfo& tps_bi = pci.basic_info;
+  const BasicInfo& traj_bi = pci.traj_basic_info;
+  if (traj_bi.n_steps != tps_bi.n_steps || traj_bi.start_fixed != tps_bi.start_fixed) {
+    PRINT_AND_THROW("TPS and Traj Problem Info do not match");
+  }
+  int n_steps = tps_bi.n_steps;
+  int traj_m_ext = traj_bi.m_ext;
+  int traj_n_ext = traj_bi.n_ext;
+  int tps_m_ext = tps_bi.m_ext;
+  int tps_n_ext = tps_bi.n_ext;
+
 
   // Make the sqp traj problem.
-  TrajOptProbPtr traj_prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
+  TrajOptProbPtr traj_prob(new TrajOptProb(n_steps, pci.rad, traj_m_ext, traj_n_ext));
   // Make the tps problem
-  TrajOptProbPtr tps_prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
+  TrajOptProbPtr tps_prob(new TrajOptProb(n_steps, pci.rad, tps_m_ext, tps_n_ext));
 
   int n_dof = traj_prob->m_rad->GetDOF();
   DblVec cur_dofvals = traj_prob->m_rad->GetDOFValues();
 
-  if (bi.start_fixed) {
+  if (traj_bi.start_fixed) {
     if (pci.init_info.data.rows() > 0 && !allClose(toVectorXd(cur_dofvals), pci.init_info.data.row(0))) {
       PRINT_AND_THROW( "robot dof values don't match initialization. I don't know what you want me to use for the dof values");
     }
@@ -449,8 +465,8 @@ std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const DecompProb
     }
   }
 
-  if (!bi.dofs_fixed.empty()) {
-    BOOST_FOREACH(const int& dof_ind, bi.dofs_fixed) {
+  if (!traj_bi.dofs_fixed.empty()) {
+    BOOST_FOREACH(const int& dof_ind, traj_bi.dofs_fixed) {
       for (int i=1; i < traj_prob->GetNumSteps(); ++i) {
         traj_prob->addLinearConstraint(exprSub(AffExpr(traj_prob->m_traj_vars(i,dof_ind)), AffExpr(traj_prob->m_traj_vars(0,dof_ind))), EQ);
         tps_prob->addLinearConstraint(exprSub(AffExpr(tps_prob->m_traj_vars(i,dof_ind)), AffExpr(tps_prob->m_traj_vars(0,dof_ind))), EQ);
@@ -471,11 +487,11 @@ std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const DecompProb
     ci->hatch(*traj_prob);
   }
 
-  tps_prob->SetInitTraj(pci.init_info.data);
-  tps_prob->SetInitExt(pci.init_info.data_ext);
-  traj_prob->SetInitTraj(pci.init_info.data);
-  traj_prob->SetInitExt(pci.init_info.data_ext);
-  return std::make_pair(traj_prob, tps_prob);
+  tps_prob->SetInitTraj(pci.tps_init_info.data);
+  tps_prob->SetInitExt(pci.tps_init_info.data_ext);
+  traj_prob->SetInitTraj(pci.traj_init_info.data);
+  traj_prob->SetInitExt(pci.traj_init_info.data_ext);
+  return std::make_pair(tps_prob, traj_prob);
 }
 
 std::pair<TrajOptProbPtr,TrajOptProbPtr> ConstructDecompProblem(const Json::Value& root, OpenRAVE::EnvironmentBasePtr env) {
@@ -757,6 +773,7 @@ void CollisionCostInfo::fromJson(const Value& v) {
   childFromJson(params, last_step, "last_step", n_steps-1);
   childFromJson(params, gap, "gap", 1);
   FAIL_IF_FALSE( gap >= 0 );
+  LOG_INFO("Num steps: %d", n_steps);
   FAIL_IF_FALSE((first_step >= 0) && (first_step < n_steps));
   FAIL_IF_FALSE((last_step >= first_step) && (last_step < n_steps));
   childFromJson(params, coeffs, "coeffs");
@@ -1086,6 +1103,7 @@ void TpsRelPtsCostInfo::fromJson(const Value& v) {
 void TpsRelPtsCostInfo::hatch(TrajOptProb& prob) {
   boost::shared_ptr<TpsCost> tps_cost;
   BOOST_FOREACH(const CostPtr& cost, prob.getCosts()) {
+    //LOG_INFO(cost->name());
     if (cost->name() == tps_cost_name) {
       tps_cost = boost::dynamic_pointer_cast<TpsCost>(cost);
     }

@@ -61,9 +61,6 @@ public:
   VarArray& GetVars() {
     return m_traj_vars;
   }
-  VarArray& GetAuxVars() {
-    return m_traj_vars2;
-  }
   VarArray& GetExtVars() {
     return m_ext_vars;
   }
@@ -85,8 +82,6 @@ public:
 
 private:
   VarArray m_traj_vars;
-  // This is the T' in the dual decomposition method.
-  VarArray m_traj_vars2;
   // These are the dual variables in the decomposition method.
   VarArray lambdas;
   VarArray m_ext_vars;
@@ -188,6 +183,11 @@ instead of "costs" and likewise for "constraints".
 */
 struct TRAJOPT_API DecompProblemConstructionInfo : public ProblemConstructionInfo {
 public:
+  BasicInfo traj_basic_info;
+  // tps basic info is just stored as basic_info for parsing reasons.
+  // TODO(cfinn) - this is just asking for a bug to come up in the future.
+  InitInfo traj_init_info;
+  InitInfo tps_init_info;
   vector<TermInfoPtr> tps_cost_infos;
   vector<TermInfoPtr> tps_cnt_infos;
   vector<TermInfoPtr> traj_cost_infos;
