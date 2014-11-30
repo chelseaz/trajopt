@@ -156,11 +156,11 @@ PyTrajOptProb PyConstructProblem(const std::string& json_string, py::object py_e
   return PyTrajOptProb(cpp_prob);
 }
 
-std::pair<PyTrajOptProb,PyTrajOptProb> PyConstructDecompProblem(const std::string& json_string, py::object py_env) {
+py::tuple PyConstructDecompProblem(const std::string& json_string, py::object py_env) {
   EnvironmentBasePtr cpp_env = GetCppEnv(py_env);
   Json::Value json_root = readJsonFile(json_string);
   std::pair<TrajOptProbPtr,TrajOptProbPtr> cpp_probs = ConstructDecompProblem(json_root, cpp_env);
-  return std::make_pair(PyTrajOptProb(cpp_probs.first), PyTrajOptProb(cpp_probs.second));
+  return py::make_tuple(PyTrajOptProb(cpp_probs.first), PyTrajOptProb(cpp_probs.second));
 }
 
 void SetInteractive(py::object b) {

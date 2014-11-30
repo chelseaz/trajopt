@@ -317,58 +317,13 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
 // This function optimizes the problem using dual decomposition. It
 // iteratively constructs a QP and an SQP each with a linear penalty term on
 // the trajectory variable to guide them towards a common trajectory.
-// NOTE: This is an old version that calls OptimizeProblem rather than doing
-// something smarter.
-/*
 TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
   // The dimension of the trajectory vector
   int traj_dim = tps_prob->GetNumDOF() * tps_prob->GetNumSteps();
 
   // TODO(cfinn): at some point, we will want nu to change over iteration.
   // Hyperparameters
-  double nu = 0.5, errorThresh = 1e-3 * traj_dim, maxIter = 50;
-
-  // Initialization of variables
-  double error;
-  bool converged = false;
-  TrajOptResultPtr tps_result, traj_result;
-  DblVec lambdas(traj_dim, 0.0);
-
-  for (int iter = 0; iter < maxIter; ++iter) {
-    // tps_prob->updateLinearCostTerm(&lambdas);
-    // traj_prob->updateLinearCostTerm(&lambdas);
-
-    tps_result = OptimizeTPSProblem(tps_prob, plot);
-    traj_result = OptimizeProblem(traj_prob, plot);
-
-    // Calculate absolute error and
-    error = 0.0;
-    for (int i = 0; i < tps_result->traj.size(); ++i) {
-      error += std::abs(tps_result->traj(i) - traj_result->traj(i));
-      lambdas[i] = lambdas[i] - nu * (tps_result->traj(i) - traj_result->traj(i));
-    }
-    if (error < errorThresh) {
-      converged = true;
-      break;
-    } else {
-      tps_prob->SetInitTraj(tps_result->traj);
-      traj_prob->SetInitTraj(traj_result->traj);
-    }
-  }
-  return traj_result;
-}
-*/
-
-// This function optimizes the problem using dual decomposition. It
-// iteratively constructs a QP and an SQP each with a linear penalty term on
-// the trajectory variable to guide them towards a common trajectory.
-TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr traj_prob, bool plot) {
-  // The dimension of the trajectory vector
-  int traj_dim = tps_prob->GetNumDOF() * tps_prob->GetNumSteps();
-
-  // TODO(cfinn): at some point, we will want nu to change over iteration.
-  // Hyperparameters
-  double nu = 0.5, errorThresh = 1e-3 * traj_dim, maxIter = 50;
+  double nu = 0.1, errorThresh = 1e-3 * traj_dim, maxIter = 10;
 
   // Initialization of variables
   double error;
@@ -386,9 +341,11 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
   BasicTrustRegionSQP sqp_opt;
 
   for (int iter = 0; iter < maxIter; ++iter) {
+    LOG_INFO("test");
+    printf("Iteration %d, lambdas %f\n", iter, lambdas[0]);
     // Initialize and Optimize TPS Problem
     // Initialize with most recent trajectory and add lambdas term.
-    qp_opt = BasicQP(tps_prob, &lambdas);
+    qp_opt = BasicQP(tps_prob, &neg_lambdas);
     if (plot) {
       SetupPlotting(*tps_prob, qp_opt);
     }
@@ -399,7 +356,7 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
 
     // Initialize and Optimize Trajectory problem:
-    sqp_opt = BasicTrustRegionSQP(traj_prob, &neg_lambdas);
+    sqp_opt = BasicTrustRegionSQP(traj_prob, &lambdas);
     sqp_opt.max_iter_ = 40;
     sqp_opt.min_approx_improve_frac_ = .001;
     sqp_opt.improve_ratio_threshold_ = .2;

@@ -170,7 +170,6 @@ void BasicQP::setProblem(OptProbPtr prob) {
 void BasicQP::setProblem(OptProbPtr prob, DblVec* lambdas) {
   Optimizer::setProblem(prob);
   model_ = prob->getModel();
-  // lambdas_ = DblVec(prob->GetVars().size(), 0.0);
   lambdas_ = *lambdas;
 }
 
