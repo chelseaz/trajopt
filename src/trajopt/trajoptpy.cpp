@@ -91,13 +91,13 @@ struct MatrixFuncFromPy : public MatrixOfVector {
 ConstraintType _GetConstraintType(const string& typestr) {
   if (typestr == "EQ") return EQ;
   else if (typestr == "INEQ") return INEQ;
-  else PRINT_AND_THROW("type must be \"EQ\" or \"INEQ\"");  
+  else PRINT_AND_THROW("type must be \"EQ\" or \"INEQ\"");
 }
 PenaltyType _GetPenaltyType(const string& typestr) {
   if (typestr == "SQUARED") return SQUARED;
   else if (typestr == "ABS") return ABS;
   else if (typestr == "HINGE") return HINGE;
-  else PRINT_AND_THROW("type must be \"SQUARED\" or \"ABS\" or \"HINGE\"r");  
+  else PRINT_AND_THROW("type must be \"SQUARED\" or \"ABS\" or \"HINGE\"r");
 }
 VarVector _GetVars(py::list ijs, const VarArray& vars) {
   VarVector out;
@@ -106,11 +106,11 @@ VarVector _GetVars(py::list ijs, const VarArray& vars) {
     int i = py::extract<int>(ijs[k][0]);
     int j = py::extract<int>(ijs[k][1]);
     out.push_back(vars(i,j));
-  }  
+  }
   return out;
 }
 
-void PyTrajOptProb::AddConstraint1(py::object f, py::list ijs, const string& typestr, const string& name) {  
+void PyTrajOptProb::AddConstraint1(py::object f, py::list ijs, const string& typestr, const string& name) {
   ConstraintType type = _GetConstraintType(typestr);
   VarVector vars = _GetVars(ijs, m_prob->GetVars());
   ConstraintPtr c(new ConstraintFromFunc(VectorOfVectorPtr(new VectorFuncFromPy(f)), vars, VectorXd::Ones(0), type, name));
@@ -154,6 +154,13 @@ PyTrajOptProb PyConstructProblem(const std::string& json_string, py::object py_e
   Json::Value json_root = readJsonFile(json_string);
   TrajOptProbPtr cpp_prob = ConstructProblem(json_root, cpp_env);
   return PyTrajOptProb(cpp_prob);
+}
+
+std::pair<PyTrajOptProb,PyTrajOptProb> PyConstructDecompProblem(const std::string& json_string, py::object py_env) {
+  EnvironmentBasePtr cpp_env = GetCppEnv(py_env);
+  Json::Value json_root = readJsonFile(json_string);
+  std::pair<TrajOptProbPtr,TrajOptProbPtr> cpp_probs = ConstructDecompProblem(json_root, cpp_env);
+  return std::make_pair(PyTrajOptProb(cpp_probs.first), PyTrajOptProb(cpp_probs.second));
 }
 
 void SetInteractive(py::object b) {
@@ -209,8 +216,8 @@ PyTrajOptResult PyOptimizeProblem(PyTrajOptProb& prob) {
   return OptimizeProblem(prob.m_prob, gInteractive);
 }
 
-PyTrajOptResult PyOptimizeTPSProblem(PyTrajOptProb& prob) {
-  return OptimizeTPSProblem(prob.m_prob, gInteractive);
+PyTrajOptResult PyOptimizeDecompProblem(PyTrajOptProb& tps_prob, PyTrajOptProb& traj_prob) {
+  return OptimizeDecompProblem(tps_prob.m_prob, traj_prob.m_prob, gInteractive);
 }
 
 class PyCollision {
@@ -367,8 +374,8 @@ public:
   }
   void RemoveKinBody(py::object py_kb) {
     m_viewer->RemoveKinBody(GetCppKinBody(py_kb, m_viewer->GetEnv()));
-  } 
-  
+  }
+
 private:
   OSGViewerPtr m_viewer;
   PyOSGViewer() {}
@@ -497,8 +504,9 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   ;
   py::def("SetInteractive", &SetInteractive, "if True, pause and plot every iteration");
   py::def("ConstructProblem", &PyConstructProblem, "create problem from JSON string");
+  py::def("ConstructDecompProblem", &PyConstructDecompProblem, "create problem from JSON string");
   py::def("OptimizeProblem", &PyOptimizeProblem);
-  py::def("OptimizeTPSProblem", &PyOptimizeTPSProblem);
+  py::def("OptimizeDecompProblem", &PyOptimizeDecompProblem);
 
   py::class_<PyTrajOptResult>("TrajOptResult", py::no_init)
       .def("GetCosts", &PyTrajOptResult::GetCosts)
