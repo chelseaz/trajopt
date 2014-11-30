@@ -326,10 +326,10 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
 
   // TODO(cfinn): at some point, we will want nu to change over iteration.
   // Hyperparameters
-  double nu = 0.1, errorThresh = 1e-3 * traj_dim, maxIter = 10;
+  double nu = 0.01, traj_diff_thresh = 1e-3 * traj_dim, maxIter = 10;
 
   // Initialization of variables
-  double error;
+  double traj_diff;
   bool converged = false;
   TrajOptResultPtr tps_result, traj_result;
   DblVec lambdas(traj_dim, 0.0);
@@ -346,7 +346,10 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
 
   for (int iter = 0; iter < maxIter; ++iter) {
     LOG_INFO("test");
-    printf("Iteration %d, lambdas %f\n", iter, lambdas[0]);
+    printf("Iteration %d, lambdas: \n", iter);
+    for (DblVec::const_iterator i = lambdas.begin(); i != lambdas.end(); ++i)
+      printf("%.3f, ", *i);
+    printf("\n");
     // Initialize and Optimize TPS Problem
     // Initialize with most recent trajectory and add lambdas term.
     qp_opt = BasicQP(tps_prob, &neg_lambdas);
@@ -356,10 +359,11 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
 
     init_vars_all = DblVec(init_tps_vars);
     init_vars_all.insert(init_vars_all.end(), init_tps_ext.begin(), init_tps_ext.end());
-    LOG_INFO("Num init vars: %lu, %lu", init_tps_vars.size(), init_tps_ext.size());
-    LOG_INFO("Num prob vars: %d, %d", tps_prob->GetVars().size(), tps_prob->GetExtVars().size());
-    LOG_INFO("Initializing and Optimizing QP");
+    //LOG_INFO("Num init vars: %lu, %lu", init_tps_vars.size(), init_tps_ext.size());
+    //LOG_INFO("Num prob vars: %d, %d", tps_prob->GetVars().size(), tps_prob->GetExtVars().size());
+    LOG_INFO("Initializing QP");
     qp_opt.initialize(init_vars_all);
+    LOG_INFO("Optimizing QP");
     qp_opt.optimize();
     tps_result = TrajOptResultPtr(new TrajOptResult(qp_opt.results(), *tps_prob));
 
@@ -380,13 +384,14 @@ TrajOptResultPtr OptimizeDecompProblem(TrajOptProbPtr tps_prob, TrajOptProbPtr t
     traj_result = TrajOptResultPtr(new TrajOptResult(sqp_opt.results(), *traj_prob));
 
     // Calculate absolute error between trajectories
-    error = 0.0;
+    traj_diff = 0.0;
     for (int i = 0; i < tps_result->traj.size(); ++i) {
-      error += std::abs(tps_result->traj(i) - traj_result->traj(i));
+      traj_diff += std::abs(tps_result->traj(i) - traj_result->traj(i));
       lambdas[i] = lambdas[i] - nu * (tps_result->traj(i) - traj_result->traj(i));
-      neg_lambdas[i] = - lambdas [i];
+      neg_lambdas[i] = - lambdas[i];
     }
-    if (error < errorThresh) {
+    LOG_INFO("Absolute error between trajectories is: %f", traj_diff);
+    if (traj_diff < traj_diff_thresh) {
       converged = true;
       break;
     } else {
