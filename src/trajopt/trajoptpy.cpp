@@ -216,8 +216,26 @@ PyTrajOptResult PyOptimizeProblem(PyTrajOptProb& prob) {
   return OptimizeProblem(prob.m_prob, gInteractive);
 }
 
+PyTrajOptResult PyOptimizeTrajProblem(PyTrajOptProb& prob, py::list lambdas) {
+  DblVec lambdas_;
+  int n = py::len(lambdas);
+  for (int k=0; k < n; ++k) {
+    lambdas_.push_back(py::extract<double>(lambdas[k]));
+  }
+  return OptimizeProblem(prob.m_prob, lambdas_, gInteractive);
+}
+
 PyTrajOptResult PyOptimizeDecompProblem(PyTrajOptProb& tps_prob, PyTrajOptProb& traj_prob) {
   return OptimizeDecompProblem(tps_prob.m_prob, traj_prob.m_prob, gInteractive);
+}
+
+PyTrajOptResult PyOptimizeTPSProblem(PyTrajOptProb& prob, py::list lambdas) {
+  DblVec lambdas_;
+  int n = py::len(lambdas);
+  for (int k=0; k < n; ++k) {
+    lambdas_.push_back(py::extract<double>(lambdas[k]));
+  }
+  return OptimizeTPSProblem(prob.m_prob, lambdas_, gInteractive);
 }
 
 class PyCollision {
@@ -506,6 +524,8 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   py::def("ConstructProblem", &PyConstructProblem, "create problem from JSON string");
   py::def("ConstructDecompProblem", &PyConstructDecompProblem, "create problem from JSON string");
   py::def("OptimizeProblem", &PyOptimizeProblem);
+  py::def("OptimizeTrajProblem", &PyOptimizeTrajProblem);
+  py::def("OptimizeTPSProblem", &PyOptimizeTPSProblem);
   py::def("OptimizeDecompProblem", &PyOptimizeDecompProblem);
 
   py::class_<PyTrajOptResult>("TrajOptResult", py::no_init)

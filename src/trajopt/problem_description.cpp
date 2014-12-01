@@ -421,20 +421,40 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
   opt.optimize();
   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
 }
+TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, DblVec lambdas, bool plot) {
+  Configuration::SaverPtr saver = prob->GetRAD()->Save();
+  BasicTrustRegionSQP opt(prob, &lambdas);
+  opt.max_iter_ = 40;
+  //opt.max_merit_coeff_increases_ = 10;
+  opt.min_approx_improve_frac_ = .001;
+  opt.improve_ratio_threshold_ = .2;
+  opt.merit_error_coeff_ = 20;
+  if (plot) {
+    SetupPlotting(*prob, opt);
+  }
+  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
+  DblVec init_ext = trajToDblVec(prob->GetInitExt());
+  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
+  opt.initialize(init_vars);
+  opt.optimize();
+  return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
+}
 
-/* TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, bool plot) { */
-/*   Configuration::SaverPtr saver = prob->GetRAD()->Save(); */
-/*   BasicQP opt(prob); */
-/*   if (plot) { */
-/*     SetupPlotting(*prob, opt); */
-/*   } */
-/*   DblVec init_vars = trajToDblVec(prob->GetInitTraj()); */
-/*   DblVec init_ext = trajToDblVec(prob->GetInitExt()); */
-/*   init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end()); */
-/*   opt.initialize(init_vars); */
-/*   opt.optimize(); */
-/*   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob)); */
-/* } */
+
+TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, DblVec lambdas, bool plot) {
+  Configuration::SaverPtr saver = prob->GetRAD()->Save();
+  int traj_dim = prob->GetNumDOF() * prob->GetNumSteps();
+  BasicQP opt(prob, &lambdas);
+  if (plot) {
+    SetupPlotting(*prob, opt);
+  }
+  DblVec init_vars = trajToDblVec(prob->GetInitTraj());
+  DblVec init_ext = trajToDblVec(prob->GetInitExt());
+  init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
+  opt.initialize(init_vars);
+  opt.optimize();
+  return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
+}
 
 // This method constructs a decomposition problem to be optimized by
 // OptimizeDecompProblem.
