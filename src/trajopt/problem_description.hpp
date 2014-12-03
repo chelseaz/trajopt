@@ -325,6 +325,17 @@ struct RelPtsCostInfo : public TermInfo, public MakesCost, public MakesConstrain
   DEFINE_CREATE(RelPtsCostInfo);
 };
 
+struct RelPtsPenaltyCostInfo : public TermInfo, public MakesCost {
+  int timestep;
+  MatrixXd lambdas;
+  MatrixXd rel_xyzs;
+  VectorXd pos_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(RelPtsPenaltyCostInfo);
+};
+
 struct TpsPtsConstraintInfo : public TermInfo, public MakesConstraint {
   string tps_cost_name;
   MatrixXd src_xyzs;

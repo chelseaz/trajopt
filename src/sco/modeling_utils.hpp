@@ -17,7 +17,8 @@ namespace sco {
 enum PenaltyType {
   SQUARED,
   ABS,
-  HINGE
+  HINGE,
+  SUM
 };
 
 using Eigen::VectorXd;
@@ -68,7 +69,7 @@ protected:
 
 class ConstraintFromFunc : public Constraint {
 public:
-  /// supply error function, obtain derivative numerically  
+  /// supply error function, obtain derivative numerically
   ConstraintFromFunc(VectorOfVectorPtr f, const VarVector& vars, const VectorXd& coeffs, ConstraintType type, const std::string& name);
   /// supply error function and gradient
   ConstraintFromFunc(VectorOfVectorPtr f, MatrixOfVectorPtr dfdx, const VarVector& vars, const VectorXd& coeffs, ConstraintType type, const std::string& name);

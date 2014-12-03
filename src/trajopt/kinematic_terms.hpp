@@ -52,6 +52,20 @@ struct RelPtsErrCalculator : public VectorOfVector {
   VectorXd operator()(const VectorXd& dof_vals) const;
 };
 
+struct RelPtsPenaltyCalculator : public VectorOfVector {
+  Eigen::MatrixX3d lambdas_;
+  Eigen::MatrixX3d rel_xyzs_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  RelPtsPenaltyCalculator(const Eigen::MatrixX3d& lambdas, const Eigen::MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+    lambdas_(lambdas),
+    rel_xyzs_(rel_xyzs),
+    manip_(manip),
+    link_(link) {}
+  VectorXd operator()(const VectorXd& dof_vals) const;
+};
+
+
 struct CartPoseErrorPlotter : public Plotter {
   boost::shared_ptr<void> m_calc; //actually points to a CartPoseErrCalculator = CartPoseCost::f_
   VarVector m_vars;

@@ -109,9 +109,10 @@ double CostFromErrFunc::value(const vector<double>& xin) {
     case SQUARED: return err.array().square().sum();
     case ABS: return err.array().abs().sum();
     case HINGE: return err.cwiseMax(VectorXd::Zero(err.size())).sum();
-    default: assert(0 && "unreachable"); 
+    case SUM: return err.array().sum();
+    default: assert(0 && "unreachable");
   }
-  
+
   return 0; // avoid compiler warning
 }
 ConvexObjectivePtr CostFromErrFunc::convex(const vector<double>& xin, Model* model) {
@@ -129,7 +130,8 @@ ConvexObjectivePtr CostFromErrFunc::convex(const vector<double>& xin, Model* mod
       case SQUARED: out->addQuadExpr(exprSquare(aff)); break;
       case ABS: out->addAbs(aff, 1); break;
       case HINGE: out->addHinge(aff, 1); break;
-      default: assert(0 && "unreachable");        
+      case SUM: out->addAffExpr(aff);
+      default: assert(0 && "unreachable");
     }
   }
   return out;
@@ -145,7 +147,7 @@ ConstraintFromFunc::ConstraintFromFunc(VectorOfVectorPtr f, MatrixOfVectorPtr df
 vector<double> ConstraintFromFunc::value(const vector<double>& xin) {
   VectorXd x = getVec(xin, vars_);
    VectorXd err = f_->call(x);
-   if (coeffs_.size()>0) err.array() *= coeffs_.array();     
+   if (coeffs_.size()>0) err.array() *= coeffs_.array();
    return toDblVec(err);
 }
 
@@ -159,7 +161,7 @@ ConvexConstraintsPtr ConstraintFromFunc::convex(const vector<double>& xin, Model
     if (coeffs_.size()>0) {
       if (coeffs_[i] == 0) continue;
       exprScale(aff, coeffs_[i]);
-    }    
+    }
     if (type() == INEQ) out->addIneqCnt(aff);
     else out->addEqCnt(aff);
   }

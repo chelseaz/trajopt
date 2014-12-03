@@ -19,7 +19,7 @@ using namespace util;
 
 
 namespace {
-  
+
 #if 0
 Vector3d rotVec(const Matrix3d& m) {
   Quaterniond q; q = m;
@@ -56,15 +56,15 @@ namespace trajopt {
 // CostPtr ConstructCost(VectorOfVectorPtr err_calc, const VarVector& vars, const VectorXd& coeffs, PenaltyType type, const string& name) {
 //   return CostPtr(new CostFromErrFunc(err_calc), vars, coeffs, type, name);
 // }
-  
-  
+
+
 VectorXd CartPoseErrCalculator::operator()(const VectorXd& dof_vals) const {
   manip_->SetDOFValues(toDblVec(dof_vals));
   OR::Transform newpose = link_->GetTransform();
 
   OR::Transform pose_err = pose_inv_ * newpose;
   VectorXd err = concat(rotVec(pose_err.rot), toVector3d(pose_err.trans));
-  return err;  
+  return err;
 }
 
 
@@ -77,6 +77,18 @@ VectorXd RelPtsErrCalculator::operator()(const VectorXd& dof_vals) const {
   MatrixXd err = (xyzs_ - (cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose()));
   VectorXd err_flatten(err.size());
   err_flatten << err.col(0), err.col(1), err.col(2);
+  return err_flatten;
+}
+
+VectorXd RelPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) const {
+  manip_->SetDOFValues(toDblVec(dof_vals));
+  OR::Transform cur_pose = link_->GetTransform();
+  Matrix3d cur_rot = toRot(cur_pose.rot);
+  Vector3d cur_trans = toVector3d(cur_pose.trans);
+
+  MatrixXd rel_penalty = lambdas_.cwiseProduct(cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose());
+  VectorXd err_flatten(rel_penalty.size());
+  err_flatten << rel_penalty.col(0), rel_penalty.col(1), rel_penalty.col(2);
   return err_flatten;
 }
 
@@ -161,7 +173,7 @@ VectorXd CartVelCalculator::operator()(const VectorXd& dof_vals) const {
 #if 0
 CartVelConstraint::CartVelConstraint(const VarVector& step0vars, const VarVector& step1vars, RobotAndDOFPtr manip, KinBody::LinkPtr link, double distlimit) :
         ConstraintFromFunc(VectorOfVectorPtr(new CartVelCalculator(manip, link, distlimit)),
-             MatrixOfVectorPtr(new CartVelJacCalculator(manip, link, distlimit)), concat(step0vars, step1vars), VectorXd::Ones(0), INEQ, "CartVel") 
+             MatrixOfVectorPtr(new CartVelJacCalculator(manip, link, distlimit)), concat(step0vars, step1vars), VectorXd::Ones(0), INEQ, "CartVel")
 {} // TODO coeffs
 #endif
 

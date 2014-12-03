@@ -51,6 +51,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
   TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create);
+  TermInfo::RegisterMaker("rel_pts_lambdas", &RelPtsPenaltyCostInfo::create);
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
   TermInfo::RegisterMaker("tps_rel_pts", &TpsRelPtsCostInfo::create);
@@ -951,6 +952,45 @@ void RelPtsCostInfo::hatch(TrajOptProb& prob) {
 
   prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
   prob.GetPlotter()->AddLink(link);
+}
+
+void RelPtsPenaltyCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+
+  FAIL_IF_FALSE(params.isMember("lambdas"));
+  Json::fromJson(params["lambdas"], lambdas);
+
+  FAIL_IF_FALSE(params.isMember("rel_xyzs"));
+  Json::fromJson(params["rel_xyzs"], rel_xyzs);
+
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(lambdas.rows()));
+
+  if (lambdas.rows() != rel_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of lambdas %d should be the same as size of rel_xyzs %d")%lambdas.rows()%rel_xyzs.rows());
+  }
+  if (pos_coeffs.size() != lambdas.rows()) {
+    PRINT_AND_THROW(boost::format("size of pos_coeffs %d should be the same as size of xyzs %d")%pos_coeffs.size()%lambdas.rows());
+  }
+
+  string linkstr;
+  childFromJson(params, linkstr, "link");
+  link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+  if (!link) {
+    PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+  }
+
+  const char* all_fields[] = {"timestep", "lambdas", "rel_xyzs", "pos_coeffs", "link"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
+void RelPtsPenaltyCostInfo::hatch(TrajOptProb& prob) {
+  VectorOfVectorPtr f(new RelPtsPenaltyCalculator(lambdas, rel_xyzs, prob.GetRAD(), link));
+  prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), pos_coeffs.replicate(3,1), SUM, name)));
+
+  //prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
+  //prob.GetPlotter()->AddLink(link);
 }
 
 
