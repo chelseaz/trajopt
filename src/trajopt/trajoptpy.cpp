@@ -216,6 +216,10 @@ PyTrajOptResult PyOptimizeProblem(PyTrajOptProb& prob) {
   return OptimizeProblem(prob.m_prob, gInteractive);
 }
 
+PyTrajOptResult PyOptimizePartialProblem(PyTrajOptProb& prob, int iter) {
+  return OptimizePartialProblem(prob.m_prob, iter, gInteractive);
+}
+
 PyTrajOptResult PyOptimizeTrajProblem(PyTrajOptProb& prob, py::list lambdas) {
   DblVec lambdas_;
   int n = py::len(lambdas);
@@ -524,6 +528,7 @@ BOOST_PYTHON_MODULE(ctrajoptpy) {
   py::def("ConstructProblem", &PyConstructProblem, "create problem from JSON string");
   py::def("ConstructDecompProblem", &PyConstructDecompProblem, "create problem from JSON string");
   py::def("OptimizeProblem", &PyOptimizeProblem);
+  py::def("OptimizePartialProblem", &PyOptimizePartialProblem);
   py::def("OptimizeTrajProblem", &PyOptimizeTrajProblem);
   py::def("OptimizeTPSProblem", &PyOptimizeTPSProblem);
   py::def("OptimizeDecompProblem", &PyOptimizeDecompProblem);

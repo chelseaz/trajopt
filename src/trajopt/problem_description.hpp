@@ -28,6 +28,7 @@ TrajOptProbPtr TRAJOPT_API ConstructProblem(const Json::Value&, OpenRAVE::Enviro
 std::pair<TrajOptProbPtr,TrajOptProbPtr> TRAJOPT_API ConstructDecompProblem(const DecompProblemConstructionInfo&);
 std::pair<TrajOptProbPtr,TrajOptProbPtr> TRAJOPT_API ConstructDecompProblem(const Json::Value&, OpenRAVE::EnvironmentBasePtr env);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, bool plot);
+TrajOptResultPtr TRAJOPT_API OptimizePartialProblem(TrajOptProbPtr, int iters, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeProblem(TrajOptProbPtr, DblVec lambdas, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeDecompProblem(TrajOptProbPtr, TrajOptProbPtr, bool plot);
 TrajOptResultPtr TRAJOPT_API OptimizeTPSProblem(TrajOptProbPtr, DblVec lambdas, bool plot);
