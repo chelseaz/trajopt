@@ -92,6 +92,45 @@ VectorXd RelPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) const {
   return err_flatten;
 }
 
+VectorXd FeedbackRelPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) const {
+  manip_->SetDOFValues(toDblVec(dof_vals));
+  OR::Transform cur_pose = link_->GetTransform();
+  Matrix3d cur_rot = toRot(cur_pose.rot);
+  Vector3d cur_trans = toVector3d(cur_pose.trans);
+
+  MatrixXd rel_penalty = nus_.cwiseProduct(cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose());
+  VectorXd err_flatten(rel_penalty.size());
+  err_flatten << rel_penalty.col(0), rel_penalty.col(1), rel_penalty.col(2);
+  return err_flatten;
+}
+
+VectorXd PointcloudPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) const {
+  manip_->SetDOFValues(toDblVec(dof_vals));
+
+  //  Point the value of dof_vals
+  int length = dof_vals.size();
+  // PRINT_AND_THROW(boost::format("The dof_vals vector is of length %d")%length);
+  // std::cout << length << std::endl;
+  // std::cout << dof_vals << std::endl;
+
+  OR::Transform cur_pose = link_->GetTransform();
+  Matrix3d cur_rot = toRot(cur_pose.rot); // Rotation
+  Vector3d cur_trans = toVector3d(cur_pose.trans); // Translation
+
+  // HOW THE HECK DO U DO THIS??
+  // variables needed: lambdas_, orig_pc_, num_pc_considered_, pc_time_steps_
+  // MatrixXd pc_penalty = lambdas_.cwiseProduct(cur_trans.transpose().colwise().replicate(orig_pc_.rows()) + (orig_pc_ - cur_trans.transpose().colwise().replicate(orig_pc_.rows())) * cur_rot.transpose());
+  MatrixXd pc_penalty = lambdas_.cwiseProduct(cur_trans.transpose().colwise().replicate(orig_pc_.rows()) + orig_pc_ * cur_rot.transpose());
+  VectorXd err_flatten(pc_penalty.size());
+  err_flatten << pc_penalty.col(0), pc_penalty.col(1), pc_penalty.col(2);
+
+  // Making sure the z axis never matter
+  if (err_flatten(2) != 0) {
+      PRINT_AND_THROW(boost::format("The cost for z axis should be 0"));
+  }
+  return err_flatten;
+}
+
 
 #if 0
 CartPoseCost::CartPoseCost(const VarVector& vars, const OR::Transform& pose, RobotAndDOFPtr manip, KinBody::LinkPtr link, const VectorXd& coeffs) :

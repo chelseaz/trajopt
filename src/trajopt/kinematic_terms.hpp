@@ -65,6 +65,35 @@ struct RelPtsPenaltyCalculator : public VectorOfVector {
   VectorXd operator()(const VectorXd& dof_vals) const;
 };
 
+struct FeedbackRelPtsPenaltyCalculator : public VectorOfVector {
+  Eigen::MatrixX3d nus_;
+  Eigen::MatrixX3d rel_xyzs_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  FeedbackRelPtsPenaltyCalculator(const Eigen::MatrixX3d& nus, const Eigen::MatrixX3d& rel_xyzs, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+    nus_(nus),
+    rel_xyzs_(rel_xyzs),
+    manip_(manip),
+    link_(link) {}
+  VectorXd operator()(const VectorXd& dof_vals) const;
+};
+
+struct PointcloudPtsPenaltyCalculator : public VectorOfVector {
+  Eigen::MatrixX3d lambdas_;
+  Eigen::MatrixX3d orig_pc_;
+  // int num_pc_considered_;
+  // VectorXd pc_time_steps_;
+  ConfigurationPtr manip_;
+  OR::KinBody::LinkPtr link_;
+  PointcloudPtsPenaltyCalculator(const Eigen::MatrixX3d& lambdas, const Eigen::MatrixX3d& orig_pc, ConfigurationPtr manip, OR::KinBody::LinkPtr link) :
+    lambdas_(lambdas),
+    orig_pc_(orig_pc),
+    // num_pc_considered_(num_pc_considered),
+    // pc_time_steps_(pc_time_steps),
+    manip_(manip),
+    link_(link) {}
+  VectorXd operator()(const VectorXd& dof_vals) const;
+};
 
 struct CartPoseErrorPlotter : public Plotter {
   boost::shared_ptr<void> m_calc; //actually points to a CartPoseErrCalculator = CartPoseCost::f_
