@@ -50,8 +50,14 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
-  TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create);
+  // Adding pointcloud penalty
+  TermInfo::RegisterMaker("pc_pts_lambdas", &PointcloudPtsPenaltyCostInfo::create);
+  // Adding gripper trajectory relative points penalty
+  TermInfo::RegisterMaker("rel_pts_nus", &FeedbackRelPtsPenaltyCostInfo::create);
+
+  // Should not be used below
   TermInfo::RegisterMaker("rel_pts_lambdas", &RelPtsPenaltyCostInfo::create);
+
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
   TermInfo::RegisterMaker("tps_pose", &TpsPoseCostInfo::create);
   TermInfo::RegisterMaker("tps_rel_pts", &TpsRelPtsCostInfo::create);
@@ -465,6 +471,24 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, DblVec lambdas, bool plot)
   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
 }
 
+// TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, DblVec nus, DblVec lambdas, bool plot) {
+//   Configuration::SaverPtr saver = prob->GetRAD()->Save();
+//   BasicTrustRegionSQP opt(prob, &nus, &lambdas);
+//   opt.max_iter_ = 40;
+//   //opt.max_merit_coeff_increases_ = 10;
+//   opt.min_approx_improve_frac_ = .001;
+//   opt.improve_ratio_threshold_ = .2;
+//   opt.merit_error_coeff_ = 20;
+//   if (plot) {
+//     SetupPlotting(*prob, opt);
+//   }
+  // DblVec init_vars = trajToDblVec(prob->GetInitTraj());
+  // DblVec init_ext = trajToDblVec(prob->GetInitExt());
+  // init_vars.insert(init_vars.end(), init_ext.begin(), init_ext.end());
+  // opt.initialize(init_vars);
+//   opt.optimize();
+//   return TrajOptResultPtr(new TrajOptResult(opt.results(), *prob));
+// }
 
 TrajOptResultPtr OptimizeTPSProblem(TrajOptProbPtr prob, DblVec lambdas, bool plot) {
   Configuration::SaverPtr saver = prob->GetRAD()->Save();
@@ -949,6 +973,7 @@ void RelPtsCostInfo::fromJson(const Value& v) {
   }
 }
 
+
 struct AbsErrCalculator : public VectorOfVector {
   VectorOfVectorPtr f_;
   VectorXd max_abs_err_;
@@ -1009,12 +1034,92 @@ void RelPtsPenaltyCostInfo::fromJson(const Value& v) {
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
 }
 
+void FeedbackRelPtsPenaltyCostInfo::fromJson(const Value& v) {
+  FAIL_IF_FALSE(v.isMember("params"));
+  const Value& params = v["params"];
+  childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+
+  FAIL_IF_FALSE(params.isMember("nus"));
+  Json::fromJson(params["nus"], nus);
+
+  FAIL_IF_FALSE(params.isMember("rel_xyzs"));
+  Json::fromJson(params["rel_xyzs"], rel_xyzs);
+
+  childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(nus.rows()));
+
+  if (nus.rows() != rel_xyzs.rows()) {
+    PRINT_AND_THROW(boost::format("size of nus %d should be the same as size of rel_xyzs %d")%nus.rows()%rel_xyzs.rows());
+  }
+  if (pos_coeffs.size() != nus.rows()) {
+    PRINT_AND_THROW(boost::format("size of pos_coeffs %d should be the same as size of xyzs %d")%pos_coeffs.size()%nus.rows());
+  }
+
+  string linkstr;
+  childFromJson(params, linkstr, "link");
+  link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+  if (!link) {
+    PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+  }
+
+  const char* all_fields[] = {"timestep", "nus", "rel_xyzs", "pos_coeffs", "link"};
+  ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
+void PointcloudPtsPenaltyCostInfo::fromJson(const Value& v) {
+    FAIL_IF_FALSE(v.isMember("params"));
+    const Value& params = v["params"];
+    childFromJson(params, timestep, "timestep", gPCI->basic_info.n_steps-1);
+    // Json::fromJson(params["timestep"], timestep);
+
+    FAIL_IF_FALSE(params.isMember("lambdas"));
+    Json::fromJson(params["lambdas"], lambdas);
+
+    FAIL_IF_FALSE(params.isMember("orig_pc"));
+    Json::fromJson(params["orig_pc"], orig_pc);
+
+    string linkstr;
+    childFromJson(params, linkstr, "link");
+    link = GetLinkMaybeAttached(gPCI->rad->GetRobot(), linkstr);
+    if (!link) {
+        PRINT_AND_THROW(boost::format("invalid link name: %s")%linkstr);
+    }
+
+    // FAIL_IF_FALSE(params.isMember("num_pc_considered"));
+    // Json::fromJson(params["num_pc_considered"], num_pc_considered);
+
+    // FAIL_IF_FALSE(params.isMember("pc_time_steps"));
+    // Json::fromJson(params["pc_time_steps"], pc_time_steps);
+
+    FAIL_IF_FALSE(params.isMember("pos_coeffs"));
+    childFromJson(params, pos_coeffs, "pos_coeffs", (VectorXd)VectorXd::Ones(lambdas.rows()));
+
+    // const char* all_fields[] = {"lambdas", "orig_pc", "link", "num_pc_considered", "pc_time_steps", "pos_coeffs"};
+    const char* all_fields[] = {"timestep", "lambdas", "orig_pc", "link", "pos_coeffs"};
+    ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));
+}
+
 void RelPtsPenaltyCostInfo::hatch(TrajOptProb& prob) {
   VectorOfVectorPtr f(new RelPtsPenaltyCalculator(lambdas, rel_xyzs, prob.GetRAD(), link));
   prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), pos_coeffs.replicate(3,1), SUM, name)));
 
   //prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
   //prob.GetPlotter()->AddLink(link);
+}
+
+void FeedbackRelPtsPenaltyCostInfo::hatch(TrajOptProb& prob) {
+  VectorOfVectorPtr f(new FeedbackRelPtsPenaltyCalculator(nus, rel_xyzs, prob.GetRAD(), link));
+  prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), pos_coeffs.replicate(3,1), SUM, name)));
+
+  //prob.GetPlotter()->Add(PlotterPtr(new RelPtsErrorPlotter(f, prob.GetVarRow(timestep))));
+  //prob.GetPlotter()->AddLink(link);
+}
+
+void PointcloudPtsPenaltyCostInfo::hatch(TrajOptProb& prob) {
+    // (TODO)
+    // VectorOfVectorPtr f(new PointcloudPtsPenaltyCalculator(lambdas, orig_pc, num_pc_considered, pc_time_steps, prob.GetRAD(), link));
+    // prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(num_pc_considered), pos_coeffs.replicate(3, 1), SUM, name)));
+    VectorOfVectorPtr f(new PointcloudPtsPenaltyCalculator(lambdas, orig_pc, prob.GetRAD(), link));
+    prob.addCost(CostPtr(new CostFromErrFunc(f, prob.GetVarRow(timestep), pos_coeffs.replicate(3, 1), SUM, name)));
 }
 
 

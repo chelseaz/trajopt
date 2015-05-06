@@ -337,6 +337,28 @@ struct RelPtsPenaltyCostInfo : public TermInfo, public MakesCost {
   DEFINE_CREATE(RelPtsPenaltyCostInfo);
 };
 
+struct FeedbackRelPtsPenaltyCostInfo : public TermInfo, public MakesCost {
+  int timestep;
+  MatrixXd nus;
+  MatrixXd rel_xyzs;
+  VectorXd pos_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(FeedbackRelPtsPenaltyCostInfo);
+};
+
+struct PointcloudPtsPenaltyCostInfo : public TermInfo, public MakesCost {
+  int timestep;
+  MatrixXd lambdas;
+  MatrixXd orig_pc;
+  VectorXd pos_coeffs;
+  KinBody::LinkPtr link;
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(PointcloudPtsPenaltyCostInfo);
+};
+
 struct TpsPtsConstraintInfo : public TermInfo, public MakesConstraint {
   string tps_cost_name;
   MatrixXd src_xyzs;
