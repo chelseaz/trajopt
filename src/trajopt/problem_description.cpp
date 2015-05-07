@@ -50,6 +50,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
+  TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create); 
   // Adding pointcloud penalty
   TermInfo::RegisterMaker("pc_pts_lambdas", &PointcloudPtsPenaltyCostInfo::create);
   // Adding gripper trajectory relative points penalty

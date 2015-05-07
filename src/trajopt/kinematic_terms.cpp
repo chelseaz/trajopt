@@ -101,6 +101,8 @@ VectorXd FeedbackRelPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) c
   MatrixXd rel_penalty = nus_.cwiseProduct(cur_trans.transpose().colwise().replicate(rel_xyzs_.rows()) + rel_xyzs_ * cur_rot.transpose());
   VectorXd err_flatten(rel_penalty.size());
   err_flatten << rel_penalty.col(0), rel_penalty.col(1), rel_penalty.col(2);
+  // std::cout << rel_penalty.size() << std::endl;
+  // std::cout << rel_penalty.col(0) << std::endl;
   return err_flatten;
 }
 
@@ -123,11 +125,6 @@ VectorXd PointcloudPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) co
   MatrixXd pc_penalty = lambdas_.cwiseProduct(cur_trans.transpose().colwise().replicate(orig_pc_.rows()) + orig_pc_ * cur_rot.transpose());
   VectorXd err_flatten(pc_penalty.size());
   err_flatten << pc_penalty.col(0), pc_penalty.col(1), pc_penalty.col(2);
-
-  // Making sure the z axis never matter
-  // if (err_flatten(2) != 0) {
-  //     PRINT_AND_THROW(boost::format("The cost for z axis should be 0"));
-  // }
   return err_flatten;
 }
 
