@@ -125,9 +125,9 @@ VectorXd PointcloudPtsPenaltyCalculator::operator()(const VectorXd& dof_vals) co
   err_flatten << pc_penalty.col(0), pc_penalty.col(1), pc_penalty.col(2);
 
   // Making sure the z axis never matter
-  if (err_flatten(2) != 0) {
-      PRINT_AND_THROW(boost::format("The cost for z axis should be 0"));
-  }
+  // if (err_flatten(2) != 0) {
+  //     PRINT_AND_THROW(boost::format("The cost for z axis should be 0"));
+  // }
   return err_flatten;
 }
 
