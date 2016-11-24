@@ -42,5 +42,17 @@ private:
   VectorXd coeffs_;
   QuadExpr expr_;
 };
-}
 
+class TRAJOPT_API HilbertNormCost: public Cost {
+public:
+  HilbertNormCost(const VarVector& vars, const VectorXd& timesteps, const int n_dofs);
+  virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);
+  virtual double value(const vector<double>&);
+private:
+  VarVector vars_;
+  VectorXd timesteps_;
+  QuadExpr expr_;
+  MatrixXd K_;
+};
+ 
+}

@@ -1,8 +1,8 @@
 #include <Eigen/Core>
+#include <cmath>
 #include "sco/expr_ops.hpp"
 #include "sco/modeling_utils.hpp"
 #include "trajopt/trajectory_costs.hpp"
-
 
 using namespace std;
 using namespace sco;
@@ -13,6 +13,11 @@ namespace {
 
 static MatrixXd diffAxis0(const MatrixXd& in) {
   return in.middleRows(1, in.rows()-1) - in.middleRows(0, in.rows()-1);
+}
+
+static double rbf_kernel(const double x, const double y) {
+  double gamma = 1.0;
+  return exp(gamma * pow(x-y, 2));
 }
 
 
@@ -66,7 +71,6 @@ ConvexObjectivePtr JointVelCost::convex(const vector<double>& x, Model* model) {
 }
 
 
-
 JointAccCost::JointAccCost(const VarArray& vars, const VectorXd& coeffs) :
     Cost("JointAcc"), vars_(vars), coeffs_(coeffs) {
   for (int i=0; i < vars.rows()-2; ++i) {
@@ -84,6 +88,38 @@ double JointAccCost::value(const vector<double>& xvec) {
   return (diffAxis0(diffAxis0(traj)).array().square().matrix() * coeffs_.asDiagonal()).sum();
 }
 ConvexObjectivePtr JointAccCost::convex(const vector<double>& x, Model* model) {
+  ConvexObjectivePtr out(new ConvexObjective(model));
+  out->addQuadExpr(expr_);
+  return out;
+}
+
+
+HilbertNormCost::HilbertNormCost(const VarVector& vars, const VectorXd& timesteps, const int n_dofs) :
+    Cost("HilbertNorm"), vars_(vars), timesteps_(timesteps) {
+  int D = n_dofs;  // number of dofs
+  int N = timesteps_.rows();  // number of timesteps
+  MatrixXd K_(D*N, D*N);  // kernel matrix
+
+  // precompute kernel matrix
+  for (int i=0; i < N; ++i) {
+    for (int j=0; j < N; ++j) {
+      double k = rbf_kernel(timesteps_[i], timesteps_[j]);
+      // assign DxD block of kernel matrix to kernel value at timesteps i,j
+      K_.block(i*D,j*D,D,D) = MatrixXd::Constant(D,D,k);
+    }
+  }
+  
+  for (int i=0; i < D*N; ++i) {
+    for (int j=0; j < D*N; ++j) {
+      exprInc(expr_, exprMult(exprMult(AffExpr(vars[i]), AffExpr(vars[j])), K_(i,j)));
+    }
+  }
+}
+double HilbertNormCost::value(const vector<double>& xvec) {
+  VectorXd a = getVec(xvec, vars_);
+  return (a.transpose() * K_ * a)(0,0);
+}
+ConvexObjectivePtr HilbertNormCost::convex(const vector<double>& x, Model* model) {
   ConvexObjectivePtr out(new ConvexObjective(model));
   out->addQuadExpr(expr_);
   return out;
