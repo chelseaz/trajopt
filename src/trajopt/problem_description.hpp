@@ -202,8 +202,6 @@ struct JointPosCostInfo : public TermInfo, public MakesCost {
   DEFINE_CREATE(JointPosCostInfo)
 };
 
-
-
 /**
  \brief Motion constraint on link
 
@@ -240,6 +238,14 @@ struct JointVelConstraintInfo : public TermInfo, public MakesConstraint {
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(JointVelConstraintInfo)
 };
+
+
+struct HilbertNormCostInfo : public TermInfo, public MakesCost {
+  void fromJson(const Value& v);
+  void hatch(TrajOptProb& prob);
+  DEFINE_CREATE(HilbertNormCostInfo)
+};
+
 
 /**
 \brief %Collision penalty

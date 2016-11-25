@@ -49,6 +49,7 @@ void RegisterMakers() {
   TermInfo::RegisterMaker("pose", &PoseCostInfo::create);
   TermInfo::RegisterMaker("joint_pos", &JointPosCostInfo::create);
   TermInfo::RegisterMaker("joint_vel", &JointVelCostInfo::create);
+  TermInfo::RegisterMaker("hilbert_norm", &HilbertNormCostInfo::create);
   TermInfo::RegisterMaker("collision", &CollisionCostInfo::create);
   TermInfo::RegisterMaker("rel_pts", &RelPtsCostInfo::create);
   TermInfo::RegisterMaker("tps", &TpsCostConstraintInfo::create);
@@ -286,6 +287,7 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
 }
 
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
+  LOG_DEBUG("Optimizing problem");
   Configuration::SaverPtr saver = prob->GetRAD()->Save();
   BasicTrustRegionSQP opt(prob);
   opt.max_iter_ = 40;
@@ -305,6 +307,7 @@ TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {
 }
 
 TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
+  LOG_DEBUG("Constructing problem");
 
   const BasicInfo& bi = pci.basic_info;
   int n_steps = bi.n_steps;
@@ -564,6 +567,22 @@ void JointVelConstraintInfo::hatch(TrajOptProb& prob) {
       prob.addLinearConstraint(-vel - vals[j], INEQ);
     }
   }
+}
+
+
+void HilbertNormCostInfo::fromJson(const Value& v) {
+  // for now: no-op
+  // TODO: configurable kernel and timesteps
+}
+void HilbertNormCostInfo::hatch(TrajOptProb& prob) {
+  int n_steps = prob.GetNumSteps();  
+  int n_dof = prob.GetNumDOF();  
+  VarVector vars = prob.GetVars().flatten();  // reshape VarArray into VarVector
+  VectorXd timesteps = VectorXd::LinSpaced(n_steps, 0.0, 1.0);
+  // TODO: is this the right scale for timesteps?
+
+  prob.addCost(CostPtr(new HilbertNormCost(vars, timesteps, n_dof)));
+  prob.getCosts().back()->setName(name);  
 }
 
 void CollisionCostInfo::fromJson(const Value& v) {

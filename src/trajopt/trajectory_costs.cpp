@@ -98,7 +98,7 @@ HilbertNormCost::HilbertNormCost(const VarVector& vars, const VectorXd& timestep
     Cost("HilbertNorm"), vars_(vars), timesteps_(timesteps) {
   int D = n_dofs;  // number of dofs
   int N = timesteps_.rows();  // number of timesteps
-  MatrixXd K_(D*N, D*N);  // kernel matrix
+  K_.resize(D*N, D*N);  // kernel matrix
 
   // precompute kernel matrix
   for (int i=0; i < N; ++i) {
