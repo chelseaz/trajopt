@@ -3,6 +3,8 @@
 #include "sco/expr_ops.hpp"
 #include "sco/modeling_utils.hpp"
 #include "trajopt/trajectory_costs.hpp"
+#include <iostream>
+#include <Eigen/Dense>
 
 using namespace std;
 using namespace sco;
@@ -16,8 +18,8 @@ static MatrixXd diffAxis0(const MatrixXd& in) {
 }
 
 static double rbf_kernel(const double x, const double y) {
-  double gamma = 1.0;
-  return exp(gamma * pow(x-y, 2));
+  double gamma = 1;
+  return exp(-gamma * pow(x-y, 2));
 }
 
 
@@ -105,13 +107,34 @@ HilbertNormCost::HilbertNormCost(const VarVector& vars, const VectorXd& timestep
     for (int j=0; j < N; ++j) {
       double k = rbf_kernel(timesteps_[i], timesteps_[j]);
       // assign DxD block of kernel matrix to kernel value at timesteps i,j
-      K_.block(i*D,j*D,D,D) = MatrixXd::Constant(D,D,k);
+      // K_.block(i*D,j*D,D,D) = MatrixXd::Constant(D,D,k);
+
+      // assign DxD block of kernel matrix to kI
+      // where k = kernel value at timesteps i,j
+      K_.block(i*D,j*D,D,D) = k * MatrixXd::Identity(D, D);
     }
   }
   
+  // shouldn't need to do the following; RBF kernel is psd  
+  // // Need to ensure K is PSD, so add \lambda_{min} times identity
+  // // TODO: convert cout to LOG_DEBUG
+  // SelfAdjointEigenSolver<MatrixXd> eigensolver(K_);
+  // if (eigensolver.info() == Success) {
+  //   VectorXd eigenvalues = eigensolver.eigenvalues();
+  //   cout << "The eigenvalues of K are:\n" << eigenvalues << endl;
+  //   double lambda_min = eigenvalues.minCoeff();
+  //   if (lambda_min < 0) {
+  //     cout << "Adding " << lambda_min << " * I to make K psd" << endl;
+  //     K_ += lambda_min * MatrixXd::Identity(D*N, D*N);
+  //   }
+  // }
+
+  double epsilon = 0.000001;
   for (int i=0; i < D*N; ++i) {
     for (int j=0; j < D*N; ++j) {
-      exprInc(expr_, exprMult(exprMult(AffExpr(vars[i]), AffExpr(vars[j])), K_(i,j)));
+      if (abs(K_(i,j)) > epsilon) {
+        exprInc(expr_, exprMult(exprMult(AffExpr(vars[i]), AffExpr(vars[j])), K_(i,j)));        
+      }
     }
   }
 }

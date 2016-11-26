@@ -1,6 +1,7 @@
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--interactive", action="store_true")
+parser.add_argument("--cost", default="joint_vel")
 args = parser.parse_args()
 
 import openravepy
@@ -30,8 +31,8 @@ request = {
   },
   "costs" : [
   {
-    "type" : "hilbert_norm", # hilbert norm cost
-    # "type" : "joint_vel", # joint-space velocity cost
+    "type" : args.cost,
+    # e.g. "joint_vel", "hilbert_norm"
     "params": {"coeffs" : [1]} # a list of length one is automatically expanded to a list of length n_dofs
     # also valid: [1.9, 2, 3, 4, 5, 5, 4, 3, 2, 1]
   },
