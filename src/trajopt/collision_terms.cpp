@@ -11,6 +11,8 @@
 #include "utils/stl_to_string.hpp"
 #include "utils/logging.hpp"
 #include <boost/functional/hash.hpp>
+#include "trajopt/kernel.hpp"
+
 using namespace OpenRAVE;
 using namespace sco;
 using namespace util;
@@ -99,14 +101,15 @@ void CollisionEvaluator::GetCollisionsCached(const DblVec& x, vector<Collision>&
   }
 }
 
-SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(ConfigurationPtr rad, const VarVector& vars) :
+SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(ConfigurationPtr rad, const VarVector& vars, const VectorXd& kernel_vals) :
   m_env(rad->GetEnv()),
   m_cc(CollisionChecker::GetOrCreate(*m_env)),
   m_rad(rad),
   m_vars(vars),
   m_link2ind(),
   m_links(),
-  m_filterMask(-1) {
+  m_filterMask(-1),
+  m_kernel_vals(kernel_vals) {
   vector<KinBody::LinkPtr> links;
   vector<int> inds;
   rad->GetAffectedLinks(m_links, true, inds);
@@ -114,6 +117,7 @@ SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(Configuration
     m_link2ind[m_links[i].get()] = inds[i];
   }
   // TODO add argument
+
 }
 
 
@@ -160,7 +164,6 @@ CastCollisionEvaluator::CastCollisionEvaluator(ConfigurationPtr rad, const VarVe
 void CastCollisionEvaluator::CalcCollisions(const DblVec& x, vector<Collision>& collisions) {
   DblVec dofvals0 = getDblVec(x, m_vars0);
   DblVec dofvals1 = getDblVec(x, m_vars1);
-  // TODO: RKHS
   m_rad->SetDOFValues(dofvals0);
   m_cc->CastVsAll(*m_rad, m_links, dofvals0, dofvals1, collisions);
 }
@@ -169,7 +172,6 @@ void CastCollisionEvaluator::CalcDistExpressions(const DblVec& x, vector<AffExpr
   GetCollisionsCached(x, collisions);
   DblVec dofvals0 = getDblVec(x, m_vars0);
   DblVec dofvals1 = getDblVec(x, m_vars1);
-  // TODO: RKHS
   CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars0, m_vars1, dofvals0, dofvals1, exprs);
 }
 void CastCollisionEvaluator::CalcDists(const DblVec& x, DblVec& dists) {
@@ -199,9 +201,9 @@ void PlotCollisions(const std::vector<Collision>& collisions, OR::EnvironmentBas
   }
 }
 
-CollisionCost::CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars) :
+CollisionCost::CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars, const VectorXd& kernel_vals) :
     Cost("collision"),
-    m_calc(new SingleTimestepCollisionEvaluator(rad, vars)), m_dist_pen(dist_pen), m_coeff(coeff)
+    m_calc(new SingleTimestepCollisionEvaluator(rad, vars, kernel_vals)), m_dist_pen(dist_pen), m_coeff(coeff)
 {}
 
 CollisionCost::CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars0, const VarVector& vars1) :
@@ -237,7 +239,7 @@ void CollisionCost::Plot(const DblVec& x, OR::EnvironmentBase& env, std::vector<
 // ALMOST EXACTLY COPIED FROM CollisionCost
 
 CollisionConstraint::CollisionConstraint(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars) :
-    m_calc(new SingleTimestepCollisionEvaluator(rad, vars)), m_dist_pen(dist_pen), m_coeff(coeff)
+    m_calc(new SingleTimestepCollisionEvaluator(rad, vars, null_vector)), m_dist_pen(dist_pen), m_coeff(coeff)
 {
   name_="collision";
 }

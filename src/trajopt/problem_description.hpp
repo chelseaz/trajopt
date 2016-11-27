@@ -268,6 +268,7 @@ struct CollisionCostInfo : public TermInfo, public MakesCost, public MakesConstr
   bool continuous;
   /// for continuous-time penalty, use swept-shape between timesteps t and t+gap (gap=1 by default)
   int gap;
+  bool use_kernel;
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(CollisionCostInfo)

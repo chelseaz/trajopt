@@ -2,7 +2,10 @@
 
 namespace trajopt {
 
+static VectorXd null_vector;
+
 double rbf_kernel(double x, double y);
+VectorXd kernel_timesteps(int n_steps);
 MatrixXd kernel_matrix(int dofs, const VectorXd& timesteps);
 
 }

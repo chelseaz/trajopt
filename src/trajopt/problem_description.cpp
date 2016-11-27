@@ -15,6 +15,7 @@
 #include "utils/eigen_slicing.hpp"
 #include <boost/algorithm/string.hpp>
 #include "sco/optimizers.hpp"
+#include "trajopt/kernel.hpp"
 using namespace Json;
 using namespace std;
 using namespace OpenRAVE;
@@ -578,8 +579,7 @@ void HilbertNormCostInfo::hatch(TrajOptProb& prob) {
   int n_steps = prob.GetNumSteps();  
   int n_dof = prob.GetNumDOF();  
   VarVector vars = prob.GetVars().flatten();  // reshape VarArray into VarVector
-  VectorXd timesteps = VectorXd::LinSpaced(n_steps, 0.0, 1.0);
-  // TODO: is this the right scale for timesteps?
+  VectorXd timesteps = kernel_timesteps(n_steps);
 
   prob.addCost(CostPtr(new HilbertNormCost(vars, timesteps, n_dof)));
   prob.getCosts().back()->setName(name);  
@@ -609,13 +609,22 @@ void CollisionCostInfo::fromJson(const Value& v) {
     PRINT_AND_THROW(boost::format("wrong size: dist_pen. expected %i got %i")%n_terms%dist_pen.size());
   }
   
-  const char* all_fields[] = {"continuous", "first_step", "last_step", "gap", "coeffs", "dist_pen"};
+  childFromJson(params, use_kernel, "use_kernel", false);
+
+  const char* all_fields[] = {"continuous", "first_step", "last_step", "gap", "coeffs", "dist_pen", "use_kernel"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));  
   
 }
 void CollisionCostInfo::hatch(TrajOptProb& prob) {
+  int n_steps = prob.GetNumSteps();
+  VectorXd timesteps = kernel_timesteps(n_steps);
+  MatrixXd K;
+  if (use_kernel) {
+    K = kernel_matrix(prob.GetNumDOF(), timesteps);
+  }
+
   if (term_type == TT_COST) {
-    if (continuous) {
+    if (continuous && !use_kernel) {
       for (int i=first_step; i <= last_step - gap; ++i) {
         prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), prob.GetVarRow(i), prob.GetVarRow(i+gap))));
         prob.getCosts().back()->setName( (boost::format("%s_%i")%name%i).str() );
@@ -623,7 +632,11 @@ void CollisionCostInfo::hatch(TrajOptProb& prob) {
     }
     else {
       for (int i=first_step; i <= last_step; ++i) {
-        prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), prob.GetVarRow(i))));
+        VectorXd kernel_col;  // indices right?
+        if (use_kernel) {
+          kernel_col = K.col(i);
+        }
+        prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), prob.GetVarRow(i), kernel_col)));
         prob.getCosts().back()->setName( (boost::format("%s_%i")%name%i).str() );
       }
     }

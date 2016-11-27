@@ -25,7 +25,7 @@ typedef boost::shared_ptr<CollisionEvaluator> CollisionEvaluatorPtr;
 
 struct SingleTimestepCollisionEvaluator : public CollisionEvaluator {
 public:
-  SingleTimestepCollisionEvaluator(ConfigurationPtr rad, const VarVector& vars);
+  SingleTimestepCollisionEvaluator(ConfigurationPtr rad, const VarVector& vars, const VectorXd& kernel_vals);
   /**
   @brief linearize all contact distances in terms of robot dofs
   
@@ -47,6 +47,7 @@ public:
   Link2Int m_link2ind;
   vector<OR::KinBody::LinkPtr> m_links;
   short m_filterMask;
+  VectorXd m_kernel_vals;
 };
 
 struct CastCollisionEvaluator : public CollisionEvaluator {
@@ -75,7 +76,7 @@ public:
 class TRAJOPT_API CollisionCost : public Cost, public Plotter {
 public:
   /* constructor for single timestep */
-  CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars);
+  CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars, const VectorXd& kernel_vals);
   /* constructor for cast cost */
   CollisionCost(double dist_pen, double coeff, ConfigurationPtr rad, const VarVector& vars0, const VarVector& vars1);
   virtual ConvexObjectivePtr convex(const vector<double>& x, Model* model);

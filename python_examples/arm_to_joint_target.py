@@ -1,7 +1,7 @@
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--interactive", action="store_true")
-parser.add_argument("--cost", default="joint_vel")
+parser.add_argument("--rkhs", action="store_true")
 args = parser.parse_args()
 
 import openravepy
@@ -31,8 +31,7 @@ request = {
   },
   "costs" : [
   {
-    "type" : args.cost,
-    # e.g. "joint_vel", "hilbert_norm"
+    "type" : "hilbert_norm" if args.rkhs else "joint_vel",
     "params": {"coeffs" : [1]} # a list of length one is automatically expanded to a list of length n_dofs
     # also valid: [1.9, 2, 3, 4, 5, 5, 4, 3, 2, 1]
   },
@@ -40,7 +39,8 @@ request = {
     "type" : "collision",
     "params" : {
       "coeffs" : [20], # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
-      "dist_pen" : [0.025] # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
+      "dist_pen" : [0.025], # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
+      "use_kernel": args.rkhs
     },    
   }
   ],

@@ -4,10 +4,15 @@
 using namespace Eigen;
 
 namespace trajopt {
-  
+
 double rbf_kernel(double x, double y) {
   double gamma = 1;
   return exp(-gamma * pow(x-y, 2));
+}
+
+VectorXd kernel_timesteps(int n_steps) {
+  // TODO: is this the right scale for timesteps?
+  return VectorXd::LinSpaced(n_steps, 0.0, 1.0);
 }
 
 MatrixXd kernel_matrix(int dofs, const VectorXd& timesteps) {
