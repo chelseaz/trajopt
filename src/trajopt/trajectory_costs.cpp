@@ -1,10 +1,8 @@
 #include <Eigen/Core>
-#include <cmath>
 #include "sco/expr_ops.hpp"
 #include "sco/modeling_utils.hpp"
 #include "trajopt/trajectory_costs.hpp"
-#include <iostream>
-#include <Eigen/Dense>
+#include "trajopt/kernel.hpp"
 
 using namespace std;
 using namespace sco;
@@ -12,16 +10,9 @@ using namespace Eigen;
 
 namespace {
 
-
 static MatrixXd diffAxis0(const MatrixXd& in) {
   return in.middleRows(1, in.rows()-1) - in.middleRows(0, in.rows()-1);
 }
-
-static double rbf_kernel(const double x, const double y) {
-  double gamma = 1;
-  return exp(-gamma * pow(x-y, 2));
-}
-
 
 }
 
@@ -98,36 +89,10 @@ ConvexObjectivePtr JointAccCost::convex(const vector<double>& x, Model* model) {
 
 HilbertNormCost::HilbertNormCost(const VarVector& vars, const VectorXd& timesteps, const int n_dofs) :
     Cost("HilbertNorm"), vars_(vars), timesteps_(timesteps) {
-  int D = n_dofs;  // number of dofs
-  int N = timesteps_.rows();  // number of timesteps
-  K_.resize(D*N, D*N);  // kernel matrix
-
   // precompute kernel matrix
-  for (int i=0; i < N; ++i) {
-    for (int j=0; j < N; ++j) {
-      double k = rbf_kernel(timesteps_[i], timesteps_[j]);
-      // assign DxD block of kernel matrix to kernel value at timesteps i,j
-      // K_.block(i*D,j*D,D,D) = MatrixXd::Constant(D,D,k);
-
-      // assign DxD block of kernel matrix to kI
-      // where k = kernel value at timesteps i,j
-      K_.block(i*D,j*D,D,D) = k * MatrixXd::Identity(D, D);
-    }
-  }
-  
-  // shouldn't need to do the following; RBF kernel is psd  
-  // // Need to ensure K is PSD, so add \lambda_{min} times identity
-  // // TODO: convert cout to LOG_DEBUG
-  // SelfAdjointEigenSolver<MatrixXd> eigensolver(K_);
-  // if (eigensolver.info() == Success) {
-  //   VectorXd eigenvalues = eigensolver.eigenvalues();
-  //   cout << "The eigenvalues of K are:\n" << eigenvalues << endl;
-  //   double lambda_min = eigenvalues.minCoeff();
-  //   if (lambda_min < 0) {
-  //     cout << "Adding " << lambda_min << " * I to make K psd" << endl;
-  //     K_ += lambda_min * MatrixXd::Identity(D*N, D*N);
-  //   }
-  // }
+  int D = n_dofs;
+  int N = timesteps.rows();
+  K_ = kernel_matrix(n_dofs, timesteps);
 
   for (int i=0; i < D*N; ++i) {
     for (int j=0; j < D*N; ++j) {

@@ -45,12 +45,14 @@ void CollisionsToDistanceExpressions(const vector<Collision>& collisions, Config
     Link2Int::const_iterator itA = link2ind.find(col.linkA);
     if (itA != link2ind.end()) {
       VectorXd dist_grad = toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itA->second, col.ptA);
+      // TODO: RKHS
       exprInc(dist, varDot(dist_grad, vars));
       exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
     }
     Link2Int::const_iterator itB = link2ind.find(col.linkB);
     if (itB != link2ind.end()) {
       VectorXd dist_grad = -toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itB->second, (isTimestep1 && (col.cctype == CCType_Between)) ? col.ptB1 : col.ptB);
+      // TODO: RKHS
       exprInc(dist, varDot(dist_grad, vars));
       exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
     }
@@ -117,6 +119,7 @@ SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(Configuration
 
 void SingleTimestepCollisionEvaluator::CalcCollisions(const DblVec& x, vector<Collision>& collisions) {
   DblVec dofvals = getDblVec(x, m_vars);
+  // TODO: RKHS
   m_rad->SetDOFValues(dofvals);
   m_cc->LinksVsAll(m_links, collisions, m_filterMask);
 }
@@ -132,6 +135,7 @@ void SingleTimestepCollisionEvaluator::CalcDistExpressions(const DblVec& x, vect
   vector<Collision> collisions;
   GetCollisionsCached(x, collisions);
   DblVec dofvals = getDblVec(x, m_vars);
+  // TODO: RKHS
   CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars, dofvals, exprs, false);
 }
 
@@ -156,6 +160,7 @@ CastCollisionEvaluator::CastCollisionEvaluator(ConfigurationPtr rad, const VarVe
 void CastCollisionEvaluator::CalcCollisions(const DblVec& x, vector<Collision>& collisions) {
   DblVec dofvals0 = getDblVec(x, m_vars0);
   DblVec dofvals1 = getDblVec(x, m_vars1);
+  // TODO: RKHS
   m_rad->SetDOFValues(dofvals0);
   m_cc->CastVsAll(*m_rad, m_links, dofvals0, dofvals1, collisions);
 }
@@ -164,6 +169,7 @@ void CastCollisionEvaluator::CalcDistExpressions(const DblVec& x, vector<AffExpr
   GetCollisionsCached(x, collisions);
   DblVec dofvals0 = getDblVec(x, m_vars0);
   DblVec dofvals1 = getDblVec(x, m_vars1);
+  // TODO: RKHS
   CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars0, m_vars1, dofvals0, dofvals1, exprs);
 }
 void CastCollisionEvaluator::CalcDists(const DblVec& x, DblVec& dists) {

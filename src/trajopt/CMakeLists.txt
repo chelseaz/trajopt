@@ -29,6 +29,7 @@ add_library(trajopt
 	bullet_unity.cpp
 	hacd_unity.cpp
 	hacd_interface.cpp
+    kernel.cpp
 )
 target_link_libraries(trajopt ${OpenRAVE_BOTH_LIBRARIES} ${Boost_SYSTEM_LIBRARY} sco utils json osgviewer)
 
