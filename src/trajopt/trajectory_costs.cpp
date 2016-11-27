@@ -129,14 +129,12 @@ HilbertNormCost::HilbertNormCost(const VarVector& vars, const VectorXd& timestep
   //   }
   // }
 
-  double epsilon = 0.000001;
   for (int i=0; i < D*N; ++i) {
     for (int j=0; j < D*N; ++j) {
-      if (abs(K_(i,j)) > epsilon) {
-        exprInc(expr_, exprMult(exprMult(AffExpr(vars[i]), AffExpr(vars[j])), K_(i,j)));        
-      }
+      exprInc(expr_, exprMult(exprMult(AffExpr(vars[i]), AffExpr(vars[j])), K_(i,j)));        
     }
   }
+  cleanupQuad(expr_);
 }
 double HilbertNormCost::value(const vector<double>& xvec) {
   VectorXd a = getVec(xvec, vars_);
