@@ -48,15 +48,54 @@ void CollisionsToDistanceExpressions(const vector<Collision>& collisions, Config
     Link2Int::const_iterator itA = link2ind.find(col.linkA);
     if (itA != link2ind.end()) {
       VectorXd dist_grad = toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itA->second, col.ptA);
-      // TODO: RKHS
       exprInc(dist, varDot(dist_grad, vars));
       exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
     }
     Link2Int::const_iterator itB = link2ind.find(col.linkB);
     if (itB != link2ind.end()) {
       VectorXd dist_grad = -toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itB->second, (isTimestep1 && (col.cctype == CCType_Between)) ? col.ptB1 : col.ptB);
-      // TODO: RKHS
       exprInc(dist, varDot(dist_grad, vars));
+      exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
+    }
+    if (itA != link2ind.end() || itB != link2ind.end()) {
+      exprs.push_back(dist);
+    }
+  }
+  LOG_DEBUG("%ld distance expressions\n", exprs.size());
+}
+
+void CollisionsToDistanceExpressionsInRKHS(const vector<Collision>& collisions, Configuration& rad,
+    const Link2Int& link2ind, const VarVector& vars, const DblVec& dofvals, const MatrixXd& kernel_vals,
+    vector<AffExpr>& exprs) {
+
+  // kernel_vals is D x N
+  int D = kernel_vals.rows();
+  int N = kernel_vals.cols();
+  // reshape vars into N x D array, since VarArray orders vars by row, not column
+  VarArray var_array = VarArray(N, D, vars.data());
+  // precompute expr for each DOF
+  AffExprVector dofvars(D);
+  for(int i=0; i < D; ++i) {
+    dofvars[i] = varDot(kernel_vals.row(i), var_array.col(i));
+  }
+
+  // almost exactly same as CollisionsToDistanceExpressions, with exprDot in place of varDot
+  // TODO: DRY up
+  exprs.clear();
+  exprs.reserve(collisions.size());
+  rad.SetDOFValues(dofvals); // since we'll be calculating jacobians
+  BOOST_FOREACH(const Collision& col, collisions) {
+    AffExpr dist(col.distance);
+    Link2Int::const_iterator itA = link2ind.find(col.linkA);
+    if (itA != link2ind.end()) {
+      VectorXd dist_grad = toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itA->second, col.ptA);
+      exprInc(dist, exprDot(dist_grad, dofvars));
+      exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
+    }
+    Link2Int::const_iterator itB = link2ind.find(col.linkB);
+    if (itB != link2ind.end()) {
+      VectorXd dist_grad = -toVector3d(col.normalB2A).transpose()*rad.PositionJacobian(itB->second, col.ptB);
+      exprInc(dist, exprDot(dist_grad, dofvars));
       exprInc(dist, -dist_grad.dot(toVectorXd(dofvals)));
     }
     if (itA != link2ind.end() || itB != link2ind.end()) {
@@ -134,7 +173,7 @@ DblVec SingleTimestepCollisionEvaluator::CurrentDOF(const DblVec& x) {
     MatrixXd a = getVec(x, m_vars);
     a.resize(D, N);  // D x N
     VectorXd curr = a.cwiseProduct(m_kernel_vals).rowwise().sum();  // D x 1
-    return vectorXdToDblVec(curr);
+    return toDblVec(curr);
   } else {
     return getDblVec(x, m_vars);
   }
@@ -156,8 +195,11 @@ void SingleTimestepCollisionEvaluator::CalcDistExpressions(const DblVec& x, vect
   vector<Collision> collisions;
   GetCollisionsCached(x, collisions);
   DblVec dofvals = CurrentDOF(x);
-  // TODO: make CollisionsToDistanceExpressions kernel-aware
-  CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars, dofvals, exprs, false);
+  if (UsingKernel()) {
+    CollisionsToDistanceExpressionsInRKHS(collisions, *m_rad, m_link2ind, m_vars, dofvals, m_kernel_vals, exprs);
+  } else {
+    CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars, dofvals, exprs, false);
+  }
 }
 
 
