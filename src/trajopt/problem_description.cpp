@@ -632,11 +632,15 @@ void CollisionCostInfo::hatch(TrajOptProb& prob) {
     }
     else {
       for (int i=first_step; i <= last_step; ++i) {
-        VectorXd kernel_col;  // indices right?
+        VarVector vars;
+        VectorXd kernel_col;
         if (use_kernel) {
+          vars = prob.GetVars().flatten();
           kernel_col = K.col(i);
+        } else {
+          vars = prob.GetVarRow(i);
         }
-        prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), prob.GetVarRow(i), kernel_col)));
+        prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), vars, kernel_col)));
         prob.getCosts().back()->setName( (boost::format("%s_%i")%name%i).str() );
       }
     }

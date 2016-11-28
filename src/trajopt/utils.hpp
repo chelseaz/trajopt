@@ -32,6 +32,9 @@ inline OR::Transform toRaveTransform(const Vector4d& q, const Vector3d& p) {
 inline DblVec trajToDblVec(const TrajArray& x) {
   return DblVec(x.data(), x.data()+x.rows()*x.cols());
 }
+inline DblVec vectorXdToDblVec(const VectorXd& x) {
+  return DblVec(x.data(), x.data()+x.size());
+}
 
 inline VectorXd concat(const VectorXd& a, const VectorXd& b) {
   VectorXd out(a.size()+b.size());

@@ -12,6 +12,7 @@
 #include "utils/logging.hpp"
 #include <boost/functional/hash.hpp>
 #include "trajopt/kernel.hpp"
+#include <iostream>
 
 using namespace OpenRAVE;
 using namespace sco;
@@ -105,11 +106,10 @@ SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(Configuration
   m_env(rad->GetEnv()),
   m_cc(CollisionChecker::GetOrCreate(*m_env)),
   m_rad(rad),
-  m_vars(vars),
+  m_vars(vars),  // set to all vars if using kernel
   m_link2ind(),
   m_links(),
-  m_filterMask(-1),
-  m_kernel_vals(kernel_vals) {
+  m_filterMask(-1) {
   vector<KinBody::LinkPtr> links;
   vector<int> inds;
   rad->GetAffectedLinks(m_links, true, inds);
@@ -118,12 +118,30 @@ SingleTimestepCollisionEvaluator::SingleTimestepCollisionEvaluator(Configuration
   }
   // TODO add argument
 
+  m_kernel_vals = kernel_vals;
+  // resize preserves column order
+  if (m_kernel_vals.size() > 0) {
+    int D = m_rad->GetDOF();
+    int N = m_kernel_vals.size() / D;
+    m_kernel_vals.resize(D, N);  // D x N
+  }
 }
 
+DblVec SingleTimestepCollisionEvaluator::CurrentDOF(const DblVec& x) {
+  if (UsingKernel()) {
+    int D = m_kernel_vals.rows();
+    int N = m_kernel_vals.cols();
+    MatrixXd a = getVec(x, m_vars);
+    a.resize(D, N);  // D x N
+    VectorXd curr = a.cwiseProduct(m_kernel_vals).rowwise().sum();  // D x 1
+    return vectorXdToDblVec(curr);
+  } else {
+    return getDblVec(x, m_vars);
+  }
+}
 
 void SingleTimestepCollisionEvaluator::CalcCollisions(const DblVec& x, vector<Collision>& collisions) {
-  DblVec dofvals = getDblVec(x, m_vars);
-  // TODO: RKHS
+  DblVec dofvals = CurrentDOF(x);
   m_rad->SetDOFValues(dofvals);
   m_cc->LinksVsAll(m_links, collisions, m_filterMask);
 }
@@ -134,14 +152,14 @@ void SingleTimestepCollisionEvaluator::CalcDists(const DblVec& x, DblVec& dists)
   CollisionsToDistances(collisions, m_link2ind, dists);
 }
 
-
 void SingleTimestepCollisionEvaluator::CalcDistExpressions(const DblVec& x, vector<AffExpr>& exprs) {
   vector<Collision> collisions;
   GetCollisionsCached(x, collisions);
-  DblVec dofvals = getDblVec(x, m_vars);
-  // TODO: RKHS
+  DblVec dofvals = CurrentDOF(x);
+  // TODO: make CollisionsToDistanceExpressions kernel-aware
   CollisionsToDistanceExpressions(collisions, *m_rad, m_link2ind, m_vars, dofvals, exprs, false);
 }
+
 
 ////////////////////////////////////////
 

@@ -39,7 +39,8 @@ public:
   void CalcDists(const DblVec& x, DblVec& exprs);
   void CalcCollisions(const DblVec& x, vector<Collision>& collisions);
   VarVector GetVars() {return m_vars;}
-
+  bool UsingKernel() { return m_kernel_vals.size() > 0; }
+  DblVec CurrentDOF(const DblVec& x);
   OR::EnvironmentBasePtr m_env;
   CollisionCheckerPtr m_cc;
   ConfigurationPtr m_rad;
@@ -47,7 +48,7 @@ public:
   Link2Int m_link2ind;
   vector<OR::KinBody::LinkPtr> m_links;
   short m_filterMask;
-  VectorXd m_kernel_vals;
+  MatrixXd m_kernel_vals;
 };
 
 struct CastCollisionEvaluator : public CollisionEvaluator {
