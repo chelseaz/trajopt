@@ -151,6 +151,7 @@ void BasicInfo::fromJson(const Json::Value& v) {
   childFromJson(v, manip, "manip");
   childFromJson(v, robot, "robot", string(""));
   childFromJson(v, dofs_fixed, "dofs_fixed", IntVec());
+  childFromJson(v, use_kernel, "use_kernel", false);
   // TODO: optimization parameters, etc?
 }
 
@@ -315,7 +316,7 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
   int m_ext = bi.m_ext;
   int n_ext = bi.n_ext;
 
-  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext));
+  TrajOptProbPtr prob(new TrajOptProb(n_steps, pci.rad, m_ext, n_ext, bi.use_kernel));
   int n_dof = prob->m_rad->GetDOF();
 
   DblVec cur_dofvals = prob->m_rad->GetDOFValues();
@@ -356,7 +357,7 @@ TrajOptProbPtr ConstructProblem(const Json::Value& root, OpenRAVE::EnvironmentBa
 }
 
 
-TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext) : m_rad(rad) {
+TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext, bool use_kernel) : m_rad(rad) {
   DblVec lower, upper;
   m_rad->GetDOFLimits(lower, upper);
   int n_dof = m_rad->GetDOF();
@@ -387,6 +388,11 @@ TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext
   }
   VarVector extvarvec = createVariables(ext_names);
   m_ext_vars = VarArray(m_ext, n_ext, extvarvec.data());
+
+  if (use_kernel) {
+    VectorXd timesteps = kernel_timesteps(n_steps);
+    m_kernel_matrix = kernel_matrix(n_dof, timesteps);
+  }
 
   m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars, m_ext_vars));
 
@@ -609,22 +615,13 @@ void CollisionCostInfo::fromJson(const Value& v) {
     PRINT_AND_THROW(boost::format("wrong size: dist_pen. expected %i got %i")%n_terms%dist_pen.size());
   }
   
-  childFromJson(params, use_kernel, "use_kernel", false);
-
-  const char* all_fields[] = {"continuous", "first_step", "last_step", "gap", "coeffs", "dist_pen", "use_kernel"};
+  const char* all_fields[] = {"continuous", "first_step", "last_step", "gap", "coeffs", "dist_pen"};
   ensure_only_members(params, all_fields, sizeof(all_fields)/sizeof(char*));  
   
 }
 void CollisionCostInfo::hatch(TrajOptProb& prob) {
-  int n_steps = prob.GetNumSteps();
-  VectorXd timesteps = kernel_timesteps(n_steps);
-  MatrixXd K;
-  if (use_kernel) {
-    K = kernel_matrix(prob.GetNumDOF(), timesteps);
-  }
-
   if (term_type == TT_COST) {
-    if (continuous && !use_kernel) {
+    if (continuous && !prob.UsingKernel()) {
       for (int i=first_step; i <= last_step - gap; ++i) {
         prob.addCost(CostPtr(new CollisionCost(dist_pen[i-first_step], coeffs[i-first_step], prob.GetRAD(), prob.GetVarRow(i), prob.GetVarRow(i+gap))));
         prob.getCosts().back()->setName( (boost::format("%s_%i")%name%i).str() );
@@ -634,9 +631,9 @@ void CollisionCostInfo::hatch(TrajOptProb& prob) {
       for (int i=first_step; i <= last_step; ++i) {
         VarVector vars;
         VectorXd kernel_col;
-        if (use_kernel) {
+        if (prob.UsingKernel()) {
           vars = prob.GetVars().flatten();
-          kernel_col = K.col(i);
+          kernel_col = prob.GetKernelMatrix().col(i);
         } else {
           vars = prob.GetVarRow(i);
         }

@@ -27,7 +27,8 @@ request = {
   "basic_info" : {
     "n_steps" : 10,
     "manip" : "rightarm", # see below for valid values
-    "start_fixed" : True # i.e., DOF values at first timestep are fixed based on current robot state
+    "start_fixed" : True, # i.e., DOF values at first timestep are fixed based on current robot state
+    "use_kernel": args.rkhs
   },
   "costs" : [
   {
@@ -39,8 +40,7 @@ request = {
     "type" : "collision",
     "params" : {
       "coeffs" : [20], # penalty coefficients. list of length one is automatically expanded to a list of length n_timesteps
-      "dist_pen" : [0.025], # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
-      "use_kernel": args.rkhs
+      "dist_pen" : [0.025] # robot-obstacle distance that penalty kicks in. expands to length n_timesteps
     },    
   }
   ],

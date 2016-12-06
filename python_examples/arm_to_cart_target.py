@@ -1,6 +1,7 @@
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--interactive", action="store_true")
+parser.add_argument("--rkhs", action="store_true")
 parser.add_argument("--position_only", action="store_true")
 args = parser.parse_args()
 
@@ -36,11 +37,12 @@ request = {
   "basic_info" : {
     "n_steps" : 10,
     "manip" : "rightarm", # see below for valid values
-    "start_fixed" : True # i.e., DOF values at first timestep are fixed based on current robot state
+    "start_fixed" : True, # i.e., DOF values at first timestep are fixed based on current robot state
+    "use_kernel": args.rkhs
   },
   "costs" : [
   {
-    "type" : "joint_vel", # joint-space velocity cost
+    "type" : "hilbert_norm" if args.rkhs else "joint_vel",
     "params": {"coeffs" : [1]} # a list of length one is automatically expanded to a list of length n_dofs
   },
   {

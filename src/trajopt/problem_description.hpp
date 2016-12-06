@@ -45,7 +45,7 @@ enum TermType {
 class TRAJOPT_API TrajOptProb : public OptProb {
 public:
   TrajOptProb();
-  TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext);
+  TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext, bool use_kernel);
   ~TrajOptProb() {}
   VarVector GetVarRow(int i) {
     return m_traj_vars.row(i);
@@ -70,6 +70,9 @@ public:
   void SetInitExt(const TrajArray& x) {m_init_ext = x;}
   TrajArray GetInitExt() {return m_init_ext;}
 
+  bool UsingKernel() {return m_kernel_matrix.size() > 0;}
+  MatrixXd& GetKernelMatrix() {return m_kernel_matrix;}
+
   TrajPlotterPtr GetPlotter() {return m_trajplotter;}
 
   friend TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo&);
@@ -80,6 +83,7 @@ private:
   ConfigurationPtr m_rad;
   TrajArray m_init_traj;
   TrajArray m_init_ext;
+  MatrixXd m_kernel_matrix;
   TrajPlotterPtr m_trajplotter;
 };
 
@@ -101,6 +105,7 @@ struct BasicInfo  {
   string manip;
   string robot; // optional
   IntVec dofs_fixed; // optional
+  bool use_kernel; // optional
   void fromJson(const Json::Value& v);
 };
 
@@ -268,7 +273,6 @@ struct CollisionCostInfo : public TermInfo, public MakesCost, public MakesConstr
   bool continuous;
   /// for continuous-time penalty, use swept-shape between timesteps t and t+gap (gap=1 by default)
   int gap;
-  bool use_kernel;
   void fromJson(const Value& v);
   void hatch(TrajOptProb& prob);
   DEFINE_CREATE(CollisionCostInfo)
