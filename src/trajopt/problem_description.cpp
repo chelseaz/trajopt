@@ -707,13 +707,13 @@ void JointConstraintInfo::hatch(TrajOptProb& prob) {
   VarVector vars = prob.GetVarRow(timestep);
   int n_dof = vars.size();
   for (int j=0; j < n_dof; ++j) {
-    if (prob.UsingKernel()) {
-      VarVector all_vars = prob.GetVars().flatten();
-      int row = timestep * n_dof + j;
-      prob.addLinearConstraint(exprSub(varDot(prob.GetKernelMatrix().row(row), all_vars), vals[j]), EQ);
-    } else {
+    // if (prob.UsingKernel()) {
+    //   VarVector all_vars = prob.GetVars().flatten();
+    //   int row = timestep * n_dof + j;
+    //   prob.addLinearConstraint(exprSub(varDot(prob.GetKernelMatrix().row(row), all_vars), vals[j]), EQ);
+    // } else {
       prob.addLinearConstraint(exprSub(AffExpr(vars[j]), vals[j]), EQ);    
-    }
+    // }
   }
 }
 
