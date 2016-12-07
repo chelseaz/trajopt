@@ -1,5 +1,5 @@
 #include <cmath>
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <iostream>
 
 using namespace Eigen;
@@ -42,5 +42,11 @@ MatrixXd compute_trajectory(int N, int D, const MatrixXd& K, const VectorXd& a) 
   all_xi.resize(D, N);  // resize preserves column order
   std::cout << "trajectory is\n" << all_xi << "\n\n";
   return all_xi.transpose();  // N x D
+}
+
+VectorXd coefs_for_trajectory(const MatrixXd& K, const MatrixXd& traj) {
+  MatrixXd traj_flat = traj.transpose();  // D x N
+  traj_flat.resize(K.rows(), 1);  // DN x 1
+  return K.ldlt().solve(traj_flat);
 }
 }

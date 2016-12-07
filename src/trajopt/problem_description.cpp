@@ -4,6 +4,7 @@
 #include "utils/logging.hpp"
 #include "sco/expr_ops.hpp"
 #include "sco/expr_op_overloads.hpp"
+#include "sco/expr_vec_ops.hpp"
 #include "trajopt/kinematic_terms.hpp"
 #include "trajopt/trajectory_costs.hpp"
 #include "trajopt/tps_costs.hpp"
@@ -331,7 +332,12 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
       PRINT_AND_THROW( "robot dof values don't match initialization. I don't know what you want me to use for the dof values");
     }
     for (int j=0; j < n_dof; ++j) {
-      prob->addLinearConstraint(exprSub(AffExpr(prob->m_traj_vars(0,j)), cur_dofvals[j]), EQ);
+      if (prob->UsingKernel()) {
+        VarVector vars = prob->GetVars().flatten();
+        prob->addLinearConstraint(exprSub(varDot(prob->GetKernelMatrix().row(j), vars), cur_dofvals[j]), EQ);
+      } else {
+        prob->addLinearConstraint(exprSub(AffExpr(prob->m_traj_vars(0,j)), cur_dofvals[j]), EQ);
+      }
     }
   }
 
@@ -350,7 +356,16 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
     ci->hatch(*prob);
   }
 
-  prob->SetInitTraj(pci.init_info.data);
+  if (prob->UsingKernel()) {
+    MatrixXd flat_x = coefs_for_trajectory(prob->GetKernelMatrix(), pci.init_info.data);
+    std::cout << "coefs for trajectory are\n" << flat_x << "\n\n";
+    std::cout << "K is\n" << prob->GetKernelMatrix() << "\n\n";
+    std::cout << "init info is\n" << pci.init_info.data << "\n\n";
+    flat_x.resize(n_steps, n_dof);
+    prob->SetInitTraj(flat_x);
+  } else {
+    prob->SetInitTraj(pci.init_info.data);
+  }
   prob->SetInitExt(pci.init_info.data_ext);
   return prob;
 
