@@ -3,18 +3,11 @@
 #include "sco/modeling_utils.hpp"
 #include "trajopt/trajectory_costs.hpp"
 #include "trajopt/kernel.hpp"
+#include "trajopt/utils.hpp"
 
 using namespace std;
 using namespace sco;
 using namespace Eigen;
-
-namespace {
-
-static MatrixXd diffAxis0(const MatrixXd& in) {
-  return in.middleRows(1, in.rows()-1) - in.middleRows(0, in.rows()-1);
-}
-
-}
 
 namespace trajopt {
 

@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include "sco/optimizers.hpp"
 #include "trajopt/kernel.hpp"
+#include <iostream>
 using namespace Json;
 using namespace std;
 using namespace OpenRAVE;
@@ -292,6 +293,10 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
     traj = getTraj(opt.x, prob.GetVars());
   }
   ext = getTraj(opt.x, prob.GetExtVars());
+
+  // compute waypoint smoothness cost when all differences are weighted equally
+  double waypt_smoothness = (diffAxis0(traj).array().square().matrix()).sum();
+  cout << "Waypoint smoothness cost is " << waypt_smoothness << '\n';
 }
 
 TrajOptResultPtr OptimizeProblem(TrajOptProbPtr prob, bool plot) {

@@ -24,6 +24,9 @@ TrajArray getTraj(const DblVec& x, const AffArray& arr) {
   return out;
 }
 
+MatrixXd diffAxis0(const MatrixXd& in) {
+  return in.middleRows(1, in.rows()-1) - in.middleRows(0, in.rows()-1);
+}
 
 Eigen::Matrix3d toRot(const OR::Vector& rq) {
   Eigen::Affine3d T;
