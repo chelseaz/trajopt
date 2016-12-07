@@ -155,8 +155,8 @@ VarVector OptProb::createVariables(const vector<string>& var_names, const DblVec
   upper_bounds_.reserve(n_cur + n_add);
   for (size_t i=0; i < var_names.size(); ++i) {
     vars_.push_back(model_->addVar(var_names[i], lb[i], ub[i]));
-    lower_bounds_.push_back(lb[i]);
-    upper_bounds_.push_back(ub[i]);
+    lower_bounds_.push_back(-10000);
+    upper_bounds_.push_back(10000);
   }
   model_->update();
   return VarVector(vars_.end()-n_add, vars_.end());
