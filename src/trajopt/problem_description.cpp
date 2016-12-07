@@ -284,7 +284,12 @@ TrajOptResult::TrajOptResult(OptResults& opt, TrajOptProb& prob) :
   BOOST_FOREACH(const ConstraintPtr& cnt, prob.getConstraints()) {
     cnt_names.push_back(cnt->name());
   }
-  traj = getTraj(opt.x, prob.GetVars());
+  if (prob.UsingKernel()) {
+    VectorXd a = toVectorXd(opt.x);
+    traj = compute_trajectory(prob.GetNumSteps(), prob.GetNumDOF(), prob.GetKernelMatrix(), a);
+  } else {
+    traj = getTraj(opt.x, prob.GetVars());
+  }
   ext = getTraj(opt.x, prob.GetExtVars());
 }
 
@@ -394,7 +399,7 @@ TrajOptProb::TrajOptProb(int n_steps, ConfigurationPtr rad, int m_ext, int n_ext
     m_kernel_matrix = kernel_matrix(n_dof, timesteps);
   }
 
-  m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars, m_ext_vars));
+  m_trajplotter.reset(new TrajPlotter(m_rad->GetEnv(), m_rad, m_traj_vars, m_ext_vars, m_kernel_matrix));
 
 }
 

@@ -1,5 +1,6 @@
 #include <cmath>
 #include <Eigen/Core>
+#include <iostream>
 
 using namespace Eigen;
 
@@ -36,4 +37,10 @@ MatrixXd kernel_matrix(int dofs, const VectorXd& timesteps) {
   return K;
 }
 
+MatrixXd compute_trajectory(int N, int D, const MatrixXd& K, const VectorXd& a) {
+  MatrixXd all_xi = K * a;
+  all_xi.resize(D, N);  // resize preserves column order
+  std::cout << "trajectory is\n" << all_xi << "\n\n";
+  return all_xi.transpose();  // N x D
+}
 }

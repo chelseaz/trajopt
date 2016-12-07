@@ -3,13 +3,14 @@
 #include "osgviewer/osgviewer.hpp"
 #include "utils/eigen_conversions.hpp"
 #include <iostream>
+#include "trajopt/kernel.hpp"
 using namespace OpenRAVE;
 using namespace std;
 
 namespace trajopt {
 
-TrajPlotter::TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars, const VarArray& extvars)
-  : m_env(env), m_config(config), m_trajvars(trajvars), m_extvars(extvars), m_decimation(1)
+TrajPlotter::TrajPlotter(OR::EnvironmentBasePtr env, ConfigurationPtr config, const VarArray& trajvars, const VarArray& extvars, const MatrixXd& kernel_matrix)
+  : m_env(env), m_config(config), m_trajvars(trajvars), m_extvars(extvars), m_kernel_matrix(kernel_matrix), m_decimation(1)
 {
 }
 
@@ -44,7 +45,15 @@ void TrajPlotter::OptimizerCallback(OptProb*, DblVec& x) {
   OSGViewerPtr viewer = OSGViewer::GetOrCreate(m_env);
   vector<GraphHandlePtr> handles;
 
-  MatrixXd traj = getTraj(x,m_trajvars);
+  MatrixXd traj;
+  if (UsingKernel()) {
+    VectorXd a = toVectorXd(x);
+    int N = m_trajvars.rows();
+    int D = m_trajvars.cols();
+    traj = compute_trajectory(N, D, m_kernel_matrix, a);
+  } else{
+    traj = getTraj(x,m_trajvars);
+  }
   vector<KinBodyPtr> bodies = m_config->GetBodies();
   vector<Eigen::MatrixXf> linktrajs(m_links.size(), Eigen::MatrixXf(traj.rows(),3));
   for (int i=0; i < traj.rows(); ++i) {
