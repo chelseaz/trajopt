@@ -344,6 +344,7 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
   if (!bi.dofs_fixed.empty()) {
     BOOST_FOREACH(const int& dof_ind, bi.dofs_fixed) {
       for (int i=1; i < prob->GetNumSteps(); ++i) {
+        // TODO: RKHS modification, but dofs_fixed doesn't seem to be used in python examples
         prob->addLinearConstraint(exprSub(AffExpr(prob->m_traj_vars(i,dof_ind)), AffExpr(prob->m_traj_vars(0,dof_ind))), EQ);
       }
     }
@@ -356,16 +357,16 @@ TrajOptProbPtr ConstructProblem(const ProblemConstructionInfo& pci) {
     ci->hatch(*prob);
   }
 
-  if (prob->UsingKernel()) {
-    MatrixXd flat_x = coefs_for_trajectory(prob->GetKernelMatrix(), pci.init_info.data);
-    std::cout << "coefs for trajectory are\n" << flat_x << "\n\n";
-    std::cout << "K is\n" << prob->GetKernelMatrix() << "\n\n";
-    std::cout << "init info is\n" << pci.init_info.data << "\n\n";
-    flat_x.resize(n_steps, n_dof);
-    prob->SetInitTraj(flat_x);
-  } else {
+  // if (prob->UsingKernel()) {
+  //   MatrixXd flat_x = coefs_for_trajectory(prob->GetKernelMatrix(), pci.init_info.data);
+  //   std::cout << "coefs for trajectory are\n" << flat_x << "\n\n";
+  //   std::cout << "K is\n" << prob->GetKernelMatrix() << "\n\n";
+  //   std::cout << "init info is\n" << pci.init_info.data << "\n\n";
+  //   flat_x.resize(n_steps, n_dof);
+  //   prob->SetInitTraj(flat_x);
+  // } else {
     prob->SetInitTraj(pci.init_info.data);
-  }
+  // }
   prob->SetInitExt(pci.init_info.data_ext);
   return prob;
 
@@ -706,7 +707,13 @@ void JointConstraintInfo::hatch(TrajOptProb& prob) {
   VarVector vars = prob.GetVarRow(timestep);
   int n_dof = vars.size();
   for (int j=0; j < n_dof; ++j) {
-    prob.addLinearConstraint(exprSub(AffExpr(vars[j]), vals[j]), EQ);    
+    if (prob.UsingKernel()) {
+      VarVector all_vars = prob.GetVars().flatten();
+      int row = timestep * n_dof + j;
+      prob.addLinearConstraint(exprSub(varDot(prob.GetKernelMatrix().row(row), all_vars), vals[j]), EQ);
+    } else {
+      prob.addLinearConstraint(exprSub(AffExpr(vars[j]), vals[j]), EQ);    
+    }
   }
 }
 

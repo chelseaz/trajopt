@@ -39,9 +39,9 @@ MatrixXd kernel_matrix(int dofs, const VectorXd& timesteps) {
 
 MatrixXd compute_trajectory(int N, int D, const MatrixXd& K, const VectorXd& a) {
   MatrixXd all_xi = K * a;
-  all_xi.resize(D, N);  // resize preserves column order
+  all_xi.resize(N, D);  // for some reason this resize preserves row order
   std::cout << "trajectory is\n" << all_xi << "\n\n";
-  return all_xi.transpose();  // N x D
+  return all_xi;  // N x D
 }
 
 VectorXd coefs_for_trajectory(const MatrixXd& K, const MatrixXd& traj) {
